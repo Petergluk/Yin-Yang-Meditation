@@ -2,7 +2,8 @@ services:
   - type: web
     name: yin-yang
     env: static
-    staticPublishPath: .
+    buildCommand: "npm install && npm run build"
+    staticPublishPath: ./dist
     routes:
       - type: rewrite
         source: /*

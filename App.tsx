@@ -101,12 +101,13 @@ const YinYang: React.FC<YinYangProps> = ({
                 cx={center}
                 cy={center}
                 r={mainRadius}
-                className="fill-black stroke-black"
+                fill="#000000"
+                stroke="#000000"
                 strokeWidth={borderWidth}
               />
               <path
                   d={pathD}
-                  className="fill-white"
+                  fill="#ffffff"
               />
               <g transform={`rotate(${eyeAngleOffset} ${center} ${center})`}>
                 <circle cx={center} cy={eyeCenterYTop} className="animate-pulse-size" style={{...basePulseStyle, fill: darkEyeColor}} />

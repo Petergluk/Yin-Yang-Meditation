@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Meditative Yin-Yang</title>
-    <script src="https://cdn.tailwindcss.com"></script>
     <script>
       // Support for dark mode preference
       if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -12,40 +11,20 @@
       } else {
         document.documentElement.classList.remove('dark')
       }
-
-      // Add custom tailwind config
-      tailwind.config = {
-        theme: {
-          extend: {
-            animation: {
-              'spin-continuous': 'spin-continuous linear infinite',
-              'pulse-size': 'pulse-size ease-in-out infinite',
-            },
-            keyframes: {
-              'spin-continuous': {
-                'from': { transform: 'rotate(360deg)' },
-                'to': { transform: 'rotate(0deg)' },
-              },
-              'pulse-size': {
-                '0%, 100%': { r: 'var(--min-radius, 4)' },
-                '50%': { r: 'var(--max-radius, 12)' },
-              },
-            }
-          }
-        }
-      }
     </script>
-  <script type="importmap">
+<script type="importmap">
 {
   "imports": {
+    "react": "https://aistudiocdn.com/react@^19.2.0",
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0"
+    "vite": "https://aistudiocdn.com/vite@^7.1.12",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0"
   }
 }
 </script>
 </head>
-  <body class="antialiased text-slate-500 dark:text-slate-400">
+  <body class="antialiased text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

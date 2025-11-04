@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes spin-continuous {
+  from {
+    transform: rotate(360deg);
+  }
+  to {
+    transform: rotate(0deg);
+  }
+}
+
+.animate-spin-continuous {
+  animation: spin-continuous linear infinite;
+}
+
+@keyframes pulse-size {
+  0%,
+  100% {
+    r: var(--min-radius);
+  }
+  50% {
+    r: var(--max-radius);
+  }
+}
+
+.animate-pulse-size {
+  animation: pulse-size linear infinite;
+}
