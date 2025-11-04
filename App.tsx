@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // --- Color Utility Functions ---
 const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
@@ -138,6 +138,9 @@ interface Settings {
   bgLightness: number;
   bgWarmth: number;
   glowSize: number;
+  metronomeEnabled: boolean;
+  metronomeBPM: number;
+  metronomeSound: 'click' | 'beep';
 }
 
 interface Preset {
@@ -165,6 +168,9 @@ const initialSettings: Settings = {
   bgLightness: 85,
   bgWarmth: 85,
   glowSize: 25,
+  metronomeEnabled: false,
+  metronomeBPM: 60,
+  metronomeSound: 'click',
 };
 
 const defaultPresets: Preset[] = [
@@ -175,6 +181,7 @@ const defaultPresets: Preset[] = [
   {
     name: 'Deep Breath',
     settings: {
+      ...initialSettings,
       rotationSpeed: 15,
       pulseSpeed: 30,
       minRadius: 5.0,
@@ -197,6 +204,7 @@ const defaultPresets: Preset[] = [
   {
     name: 'Vibrant Energy',
     settings: {
+      ...initialSettings,
       rotationSpeed: 7,
       pulseSpeed: 15,
       minRadius: 5.0,
@@ -219,6 +227,7 @@ const defaultPresets: Preset[] = [
   {
     name: 'Cosmic Swirl',
     settings: {
+      ...initialSettings,
       rotationSpeed: 60,
       pulseSpeed: 60,
       minRadius: 4.0,
@@ -245,7 +254,7 @@ const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [animatedCurveRadius, setAnimatedCurveRadius] = useState(25);
   const [animationKey, setAnimationKey] = useState(0);
-  const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [animatedDarkEyeColor, setAnimatedDarkEyeColor] = useState('#000000');
   const [animatedLightEyeColor, setAnimatedLightEyeColor] = useState('#ffffff');
   const [viewportSize, setViewportSize] = useState({width: window.innerWidth, height: window.innerHeight});
@@ -253,6 +262,13 @@ const App: React.FC = () => {
   const [customPresets, setCustomPresets] = useState<Preset[]>([]);
   const [newPresetName, setNewPresetName] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('');
+  const [metronomeVisualPulse, setMetronomeVisualPulse] = useState(false);
+  const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome'>('main');
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const metronomeIntervalRef = useRef<number | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const {
     rotationSpeed, pulseSpeed, minRadius, maxRadius,
@@ -260,6 +276,7 @@ const App: React.FC = () => {
     maxCurveRadius, curveSpeed, invertPulsePhase,
     eyeAngleOffset, borderWidth, eyeColorInversion,
     eyeColorSpeed, bgLightness, bgWarmth, glowSize,
+    metronomeEnabled, metronomeBPM, metronomeSound,
   } = settings;
 
   useEffect(() => {
@@ -272,6 +289,59 @@ const App: React.FC = () => {
       console.error("Failed to load custom presets:", error);
     }
   }, []);
+  
+  // Metronome effect
+  useEffect(() => {
+    if (metronomeIntervalRef.current) {
+      clearInterval(metronomeIntervalRef.current);
+    }
+  
+    if (metronomeEnabled) {
+      const audioCtx = audioCtxRef.current;
+      if (!audioCtx) return;
+  
+      const playSound = () => {
+        const time = audioCtx.currentTime;
+        if (metronomeSound === 'beep') {
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(880, time);
+          gainNode.gain.setValueAtTime(0.5, time);
+          gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+          oscillator.start(time);
+          oscillator.stop(time + 0.1);
+        } else { // 'click'
+          const bufferSize = audioCtx.sampleRate * 0.05; // 50ms
+          const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+          const output = buffer.getChannelData(0);
+          for (let i = 0; i < 100; i++) {
+            output[i] = Math.random() * 2 - 1;
+          }
+          const source = audioCtx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(audioCtx.destination);
+          source.start(time);
+        }
+      };
+  
+      const interval = (60 / metronomeBPM) * 1000;
+      metronomeIntervalRef.current = window.setInterval(() => {
+        playSound();
+        setMetronomeVisualPulse(true);
+        setTimeout(() => setMetronomeVisualPulse(false), 100);
+      }, interval);
+    }
+  
+    return () => {
+      if (metronomeIntervalRef.current) {
+        clearInterval(metronomeIntervalRef.current);
+      }
+    };
+  }, [metronomeEnabled, metronomeBPM, metronomeSound]);
+
 
   useEffect(() => {
     const handleResize = () => {
@@ -355,181 +425,158 @@ const App: React.FC = () => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Yin-Yang Animation</title>
     <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            transition: background-color 0.5s;
-        }
-        main {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            width: 100%;
-        }
-        @keyframes spin-continuous {
-            from { transform: rotate(360deg); }
-            to { transform: rotate(0deg); }
-        }
-        .animate-spin-continuous {
-            animation: spin-continuous linear infinite;
-        }
+        body { margin: 0; overflow: hidden; transition: background-color 0.5s; }
+        main { position: relative; display: flex; align-items: center; justify-content: center; min-height: 100vh; width: 100%; }
+        @keyframes spin-continuous { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
+        .animate-spin-continuous { animation: spin-continuous linear infinite; }
     </style>
 </head>
 <body>
-    <main id="main-container">
-    </main>
+    <div id="start-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); color:white; display:flex; align-items:center; justify-content:center; font-family:sans-serif; font-size:2rem; cursor:pointer; z-index:100; text-align: center;">Click to Begin</div>
+    <main id="main-container"></main>
     <script>
-        const settings = ${JSON.stringify(settings)};
-
-        const hexToRgb = (hex) => {
-            const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
-            return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
-        };
-        const rgbToHex = (r, g, b) => "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
-        const lerp = (a, b, t) => a * (1 - t) + b * t;
-        const lerpColor = (colorA, colorB, amount) => {
-            const rgbA = hexToRgb(colorA); const rgbB = hexToRgb(colorB);
-            if (!rgbA || !rgbB) return colorA;
-            const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
-            const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
-            const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
-            return rgbToHex(r, g, b);
-        };
-
-        const main = document.getElementById('main-container');
-        
-        const glowElement = document.createElement('div');
-        const symbolWrapper = document.createElement('div');
-        const breathWrapper = document.createElement('div');
-        const rotationWrapper = document.createElement('div');
-        const svgContainer = document.createElement('div');
-        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        const bgCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        const whitePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const eyeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
-        const darkEyeCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        const lightEyeCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-
-        main.append(glowElement, symbolWrapper);
-        symbolWrapper.append(breathWrapper);
-        breathWrapper.append(rotationWrapper);
-        rotationWrapper.append(svgContainer);
-        svgContainer.append(svg);
-        svg.append(bgCircle, whitePath, eyeGroup);
-        eyeGroup.append(darkEyeCircle, lightEyeCircle);
-
-        const center = 50;
-        const mainRadius = 50 - (settings.borderWidth / 2);
-        const eyeCenterYTop = center - mainRadius / 2;
-        const eyeCenterYBottom = center + mainRadius / 2;
-
-        symbolWrapper.style.position = 'relative';
-        symbolWrapper.style.display = 'flex';
-        symbolWrapper.style.alignItems = 'center';
-        symbolWrapper.style.justifyContent = 'center';
-        
-        svgContainer.style.position = 'relative';
-        svgContainer.style.borderRadius = '9999px';
-        svgContainer.style.overflow = 'hidden';
-
-        rotationWrapper.className = 'animate-spin-continuous';
-        rotationWrapper.style.animationDuration = settings.rotationSpeed + 's';
-        
-        svg.setAttribute('viewBox', '0 0 100 100');
-        svg.style.width = '100%';
-        svg.style.height = '100%';
-
-        bgCircle.setAttribute('cx', center);
-        bgCircle.setAttribute('cy', center);
-        bgCircle.setAttribute('r', mainRadius);
-        bgCircle.setAttribute('fill', '#000000');
-        bgCircle.setAttribute('stroke', '#000000');
-        bgCircle.setAttribute('stroke-width', settings.borderWidth);
-
-        whitePath.setAttribute('fill', '#ffffff');
-
-        eyeGroup.setAttribute('transform', \`rotate(\${settings.eyeAngleOffset} \${center} \${center})\`);
-        
-        darkEyeCircle.setAttribute('cx', center);
-        darkEyeCircle.setAttribute('cy', eyeCenterYTop);
-
-        lightEyeCircle.setAttribute('cx', center);
-        lightEyeCircle.setAttribute('cy', eyeCenterYBottom);
-        
-        let startTime = 0;
-        function animate(timestamp) {
-            if (!startTime) startTime = timestamp;
-            const elapsed = timestamp - startTime;
-
-            // --- Dynamic Calculations ---
-            const viewportMin = Math.min(window.innerWidth, window.innerHeight);
-            const baseSize = (settings.maxBreathPercent / 100) * viewportMin * 0.9;
-            const minScale = settings.minBreathPercent / settings.maxBreathPercent;
-            const breathPeriod = settings.breathSpeed * 1000;
-            const breathPhase = (elapsed % breathPeriod) / breathPeriod;
-            const breathEasedValue = (1 - Math.cos(breathPhase * 2 * Math.PI)) / 2;
-            const currentScale = lerp(minScale, 1.0, breathEasedValue);
+        const overlay = document.getElementById('start-overlay');
+        overlay.addEventListener('click', () => {
+            overlay.style.display = 'none';
             
-            const curvePeriod = settings.curveSpeed * 1000;
-            const curvePhase = (elapsed % curvePeriod) / curvePeriod;
-            const curveEasedValue = Math.pow(Math.sin(curvePhase * Math.PI), 4);
-            const currentRadius = 25 + ((settings.maxCurveRadius - 25) * curveEasedValue);
-            const pathD = \`M\${center},\${center + mainRadius} A\${currentRadius} \${currentRadius} 0 0 0 \${center} \${center} A\${currentRadius} \${currentRadius} 0 0 1 \${center} \${center - mainRadius} A\${mainRadius} \${mainRadius} 0 0 1 \${center} \${center + mainRadius} Z\`;
+            const settings = ${JSON.stringify(settings)};
+            let audioCtx = null;
+            if (settings.metronomeEnabled) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
 
-            const colorPeriod = settings.eyeColorSpeed * 1000;
-            const colorPhase = (elapsed % colorPeriod) / colorPeriod;
-            const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
-            const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
-            const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
-            const lightEyeColor = lerpColor('#ffffff', '#dark', colorInversionFactor);
+            const hexToRgb = (hex) => {
+                const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
+                return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
+            };
+            const rgbToHex = (r, g, b) => "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
+            const lerp = (a, b, t) => a * (1 - t) + b * t;
+            const lerpColor = (colorA, colorB, amount) => {
+                const rgbA = hexToRgb(colorA); const rgbB = hexToRgb(colorB);
+                if (!rgbA || !rgbB) return colorA;
+                const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
+                const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
+                const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
+                return rgbToHex(r, g, b);
+            };
 
-            const pulsePeriod = settings.pulseSpeed * 1000;
-            const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
-            const darkEyeEasedValue = (1 - Math.cos(darkEyePhase * 2 * Math.PI)) / 2;
-            const darkEyeRadius = lerp(settings.minRadius, settings.maxRadius, darkEyeEasedValue);
+            const main = document.getElementById('main-container');
+            const glowElement = document.createElement('div');
+            const symbolWrapper = document.createElement('div');
+            const breathWrapper = document.createElement('div');
+            const rotationWrapper = document.createElement('div');
+            const svgContainer = document.createElement('div');
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            const bgCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const whitePath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            const eyeGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const darkEyeCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            const lightEyeCircle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+
+            main.append(glowElement, symbolWrapper);
+            symbolWrapper.append(breathWrapper);
+            breathWrapper.append(rotationWrapper);
+            rotationWrapper.append(svgContainer);
+            svgContainer.append(svg);
+            svg.append(bgCircle, whitePath, eyeGroup);
+            eyeGroup.append(darkEyeCircle, lightEyeCircle);
+
+            const center = 50; const mainRadius = 50 - (settings.borderWidth / 2);
+            const eyeCenterYTop = center - mainRadius / 2; const eyeCenterYBottom = center + mainRadius / 2;
+
+            symbolWrapper.style.position = 'relative'; symbolWrapper.style.display = 'flex';
+            symbolWrapper.style.alignItems = 'center'; symbolWrapper.style.justifyContent = 'center';
+            svgContainer.style.position = 'relative'; svgContainer.style.borderRadius = '9999px'; svgContainer.style.overflow = 'hidden';
+            rotationWrapper.className = 'animate-spin-continuous'; rotationWrapper.style.animationDuration = settings.rotationSpeed + 's';
+            svg.setAttribute('viewBox', '0 0 100 100'); svg.style.width = '100%'; svg.style.height = '100%';
+            bgCircle.setAttribute('cx', center); bgCircle.setAttribute('cy', center); bgCircle.setAttribute('r', mainRadius);
+            bgCircle.setAttribute('fill', '#000000'); bgCircle.setAttribute('stroke', '#000000'); bgCircle.setAttribute('stroke-width', settings.borderWidth);
+            whitePath.setAttribute('fill', '#ffffff');
+            eyeGroup.setAttribute('transform', \`rotate(\${settings.eyeAngleOffset} \${center} \${center})\`);
+            darkEyeCircle.setAttribute('cx', center); darkEyeCircle.setAttribute('cy', eyeCenterYTop);
+            lightEyeCircle.setAttribute('cx', center); lightEyeCircle.setAttribute('cy', eyeCenterYBottom);
             
-            const lightEyeElapsed = settings.invertPulsePhase ? elapsed + (pulsePeriod / 2) : elapsed;
-            const lightEyePhase = (lightEyeElapsed % pulsePeriod) / pulsePeriod;
-            const lightEyeEasedValue = (1 - Math.cos(lightEyePhase * 2 * Math.PI)) / 2;
-            const lightEyeRadius = lerp(settings.minRadius, settings.maxRadius, lightEyeEasedValue);
+            let metronomePulse = false;
+            if (settings.metronomeEnabled && audioCtx) {
+                const playSound = () => {
+                    const time = audioCtx.currentTime;
+                    if (settings.metronomeSound === 'beep') {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.setValueAtTime(880, time);
+                        gain.gain.setValueAtTime(0.5, time);
+                        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+                        osc.start(time);
+                        osc.stop(time + 0.1);
+                    } else {
+                        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+                        const output = buffer.getChannelData(0);
+                        for (let i = 0; i < 100; i++) { output[i] = Math.random() * 2 - 1; }
+                        const source = audioCtx.createBufferSource();
+                        source.buffer = buffer;
+                        source.connect(audioCtx.destination);
+                        source.start(time);
+                    }
+                };
+                const interval = (60 / settings.metronomeBPM) * 1000;
+                setInterval(() => {
+                    playSound();
+                    metronomePulse = true;
+                    setTimeout(() => { metronomePulse = false; }, 100);
+                }, interval);
+            }
 
-            // --- Update Dynamic Attributes ---
-            symbolWrapper.style.width = \`\${baseSize}px\`;
-            symbolWrapper.style.height = \`\${baseSize}px\`;
-            svgContainer.style.width = \`\${baseSize}px\`;
-            svgContainer.style.height = \`\${baseSize}px\`;
-            
-            breathWrapper.style.transform = \`scale(\${currentScale})\`;
-            whitePath.setAttribute('d', pathD);
-            darkEyeCircle.setAttribute('fill', darkEyeColor);
-            darkEyeCircle.setAttribute('r', darkEyeRadius);
-            lightEyeCircle.setAttribute('fill', lightEyeColor);
-            lightEyeCircle.setAttribute('r', lightEyeRadius);
-
-            // Background
-            const warmthFactor = (settings.bgWarmth - 50) / 50;
-            const saturation = Math.abs(warmthFactor) * 40;
-            const hue = warmthFactor > 0 ? 40 : 220;
-            main.style.backgroundColor = \`hsl(\${hue}, \${saturation}%, \${settings.bgLightness}%)\`;
-            
-            // Glow
-            const glowColor = settings.bgLightness < 50 ? 'rgba(203, 213, 225, 0.2)' : 'rgba(0, 0, 0, 0.2)';
-            const blurRadius = (settings.glowSize / 100) * 150;
-            const spreadRadius = (settings.glowSize / 100) * 20;
-            glowElement.style.cssText = \`
-                width: \${baseSize}px; height: \${baseSize}px;
-                box-shadow: 0 0 \${blurRadius}px \${spreadRadius}px \${glowColor};
-                border-radius: 50%; position: absolute;
-                opacity: \${settings.glowSize > 0 ? 1 : 0};
-                transition: opacity 0.3s, box-shadow 0.3s;
-                transform: scale(\${currentScale});
-            \`;
-
+            let startTime = 0;
+            function animate(timestamp) {
+                if (!startTime) startTime = timestamp;
+                const elapsed = timestamp - startTime;
+                const viewportMin = Math.min(window.innerWidth, window.innerHeight);
+                const baseSize = (settings.maxBreathPercent / 100) * viewportMin * 0.9;
+                const minScale = settings.minBreathPercent / settings.maxBreathPercent;
+                const breathPeriod = settings.breathSpeed * 1000;
+                const breathPhase = (elapsed % breathPeriod) / breathPeriod;
+                const breathEasedValue = (1 - Math.cos(breathPhase * 2 * Math.PI)) / 2;
+                const currentScale = lerp(minScale, 1.0, breathEasedValue);
+                const curvePeriod = settings.curveSpeed * 1000;
+                const curvePhase = (elapsed % curvePeriod) / curvePeriod;
+                const curveEasedValue = Math.pow(Math.sin(curvePhase * Math.PI), 4);
+                const currentRadius = 25 + ((settings.maxCurveRadius - 25) * curveEasedValue);
+                const pathD = \`M\${center},\${center + mainRadius} A\${currentRadius} \${currentRadius} 0 0 0 \${center} \${center} A\${currentRadius} \${currentRadius} 0 0 1 \${center} \${center - mainRadius} A\${mainRadius} \${mainRadius} 0 0 1 \${center} \${center + mainRadius} Z\`;
+                const colorPeriod = settings.eyeColorSpeed * 1000;
+                const colorPhase = (elapsed % colorPeriod) / colorPeriod;
+                const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
+                const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
+                const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
+                const lightEyeColor = lerpColor('#ffffff', '#000000', colorInversionFactor);
+                const pulsePeriod = settings.pulseSpeed * 1000;
+                const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
+                const darkEyeEasedValue = (1 - Math.cos(darkEyePhase * 2 * Math.PI)) / 2;
+                const darkEyeRadius = lerp(settings.minRadius, settings.maxRadius, darkEyeEasedValue);
+                const lightEyeElapsed = settings.invertPulsePhase ? elapsed + (pulsePeriod / 2) : elapsed;
+                const lightEyePhase = (lightEyeElapsed % pulsePeriod) / pulsePeriod;
+                const lightEyeEasedValue = (1 - Math.cos(lightEyePhase * 2 * Math.PI)) / 2;
+                const lightEyeRadius = lerp(settings.minRadius, settings.maxRadius, lightEyeEasedValue);
+                symbolWrapper.style.width = \`\${baseSize}px\`; symbolWrapper.style.height = \`\${baseSize}px\`;
+                svgContainer.style.width = \`\${baseSize}px\`; svgContainer.style.height = \`\${baseSize}px\`;
+                breathWrapper.style.transform = \`scale(\${currentScale})\`; whitePath.setAttribute('d', pathD);
+                darkEyeCircle.setAttribute('fill', darkEyeColor); darkEyeCircle.setAttribute('r', darkEyeRadius);
+                lightEyeCircle.setAttribute('fill', lightEyeColor); lightEyeCircle.setAttribute('r', lightEyeRadius);
+                const warmthFactor = (settings.bgWarmth - 50) / 50; const saturation = Math.abs(warmthFactor) * 40;
+                const hue = warmthFactor > 0 ? 40 : 220;
+                main.style.backgroundColor = \`hsl(\${hue}, \${saturation}%, \${settings.bgLightness}%)\`;
+                const glowColor = settings.bgLightness < 50 ? 'rgba(203, 213, 225, 0.2)' : 'rgba(0, 0, 0, 0.2)';
+                const blurRadius = (settings.glowSize / 100) * 150;
+                const baseSpread = (settings.glowSize / 100) * 20;
+                const pulseSpread = (settings.glowSize / 100) * 40;
+                const spreadRadius = metronomePulse ? pulseSpread : baseSpread;
+                glowElement.style.cssText = \`width: \${baseSize}px; height: \${baseSize}px; box-shadow: 0 0 \${blurRadius}px \${spreadRadius}px \${glowColor}; border-radius: 50%; position: absolute; opacity: \${settings.glowSize > 0 ? 1 : 0}; transition: opacity 0.3s, box-shadow 0.1s; transform: scale(\${currentScale});\`;
+                requestAnimationFrame(animate);
+            }
             requestAnimationFrame(animate);
-        }
-        requestAnimationFrame(animate);
+        }, { once: true });
     <\/script>
 </body>
 </html>`;
@@ -545,7 +592,15 @@ const App: React.FC = () => {
   };
   
   const handleSettingChange = (key: keyof Settings, value: string | number | boolean) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
+    if (key === 'metronomeEnabled' && value === true) {
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (audioCtxRef.current.state === 'suspended') {
+            audioCtxRef.current.resume();
+        }
+    }
+    setSettings(prev => ({ ...prev, [key]: value as any }));
     setSelectedPreset(''); // Deselect preset when a manual change is made
   };
 
@@ -618,6 +673,20 @@ const App: React.FC = () => {
     const name = selectedPreset.split(':')[1];
     deletePreset(name);
   };
+  
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStartX(e.targetTouches[0].clientX);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+      if (touchStartX === null) return;
+      const touchEndX = e.changedTouches[0].clientX;
+      const deltaX = touchEndX - touchStartX;
+      if (deltaX < -50) { // Swiped left
+          setIsPanelOpen(false);
+      }
+      setTouchStartX(null);
+  };
 
 
   const baseSize = (maxBreathPercent / 100) * Math.min(viewportSize.width, viewportSize.height) * 0.9;
@@ -629,7 +698,10 @@ const App: React.FC = () => {
 
   const glowColor = bgLightness < 50 ? 'rgba(203, 213, 225, 0.2)' : 'rgba(0, 0, 0, 0.2)';
   const blurRadius = (glowSize / 100) * 150;
-  const spreadRadius = (glowSize / 100) * 20;
+  
+  const baseSpreadRadius = (glowSize / 100) * 20;
+  const pulseSpreadRadius = (glowSize / 100) * 40;
+  const spreadRadius = metronomeVisualPulse ? pulseSpreadRadius : baseSpreadRadius;
 
   const glowStyle = {
     width: `${baseSize}px`,
@@ -638,88 +710,23 @@ const App: React.FC = () => {
     borderRadius: '50%',
     position: 'absolute' as 'absolute',
     opacity: glowSize > 0 ? 1 : 0,
-    transition: 'opacity 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
+    transition: 'opacity 0.3s ease-in-out, box-shadow 0.1s ease-in-out',
   };
 
-
-  return (
-    <main 
-      className={`relative flex items-center justify-center min-h-screen transition-colors duration-500 overflow-hidden`}
-      style={{ backgroundColor: bgColor }}
-    >
-        <button
-          onClick={() => setIsPanelOpen(!isPanelOpen)}
-          className="absolute top-4 left-4 z-30 p-2 space-y-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md border border-slate-200 dark:border-slate-700"
-          aria-label="Toggle settings panel"
-        >
-          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
-          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
-          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
-        </button>
-
-        <div className={`absolute top-0 left-0 h-full z-20 transition-transform duration-500 ease-in-out ${isPanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="w-64 md:w-80 overflow-y-auto p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700 h-full">
+  const renderPanelContent = () => {
+    switch(panelView) {
+      case 'visuals':
+        return (
+          <>
             <div className="pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
-              <h2 className="text-lg font-semibold text-center text-slate-800 dark:text-slate-200">Settings</h2>
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label="Back to main menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    <span>Visual Settings</span>
+                </button>
             </div>
-            
-              {/* Presets Section */}
-              <div className="mb-4">
-                <div className="space-y-2 mb-4">
-                  <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Load Preset
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <select
-                      id="preset-select"
-                      value={selectedPreset}
-                      onChange={handlePresetSelect}
-                      className="flex-grow px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
-                      aria-label="Load a preset"
-                    >
-                      <option value="">Select a preset...</option>
-                      <optgroup label="Defaults">
-                        {defaultPresets.map(p => <option key={p.name} value={`default:${p.name}`}>{p.name}</option>)}
-                      </optgroup>
-                      {customPresets.length > 0 && (
-                        <optgroup label="Custom">
-                          {customPresets.map(p => <option key={p.name} value={`custom:${p.name}`}>{p.name}</option>)}
-                        </optgroup>
-                      )}
-                    </select>
-                    <button 
-                      onClick={handleDeleteSelectedPreset} 
-                      disabled={!selectedPreset.startsWith('custom:')}
-                      title="Delete selected custom preset"
-                      aria-label="Delete selected custom preset"
-                      className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition-colors disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="space-y-2 pt-2">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Save Current Settings</p>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      value={newPresetName} 
-                      onChange={e => setNewPresetName(e.target.value)} 
-                      placeholder="Preset name..." 
-                      className="flex-grow px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
-                      aria-label="New preset name"
-                    />
-                    <button onClick={savePreset} disabled={!newPresetName.trim()} className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed">
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+            <div className="flex-grow overflow-y-auto pr-1 -mr-2">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Rotation Speed ({rotationSpeed}s)
@@ -731,8 +738,8 @@ const App: React.FC = () => {
                 />
               </div>
               <hr className="border-slate-200 dark:border-slate-700 mb-4" />
-               <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Main Symbol</p>
-               <div className="mb-4">
+                <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Main Symbol</p>
+                <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Border Width ({borderWidth.toFixed(1)})
                 </label>
@@ -802,8 +809,8 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-               <hr className="border-slate-200 dark:border-slate-700 mb-4" />
-               <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Eyes Pulse</p>
+                <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+                <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Eyes Pulse</p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Pulse Speed ({pulseSpeed}s)
@@ -864,7 +871,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-               <div className="pt-2 mb-4">
+                <div className="pt-2 mb-4">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -878,8 +885,8 @@ const App: React.FC = () => {
                 </label>
               </div>
               <hr className="border-slate-200 dark:border-slate-700 mb-4" />
-               <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Background</p>
-               <div className="mb-4">
+                <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Background</p>
+                <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Lightness ({bgLightness}%)
                 </label>
@@ -889,7 +896,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-               <div className="mb-4">
+                <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Warmth ({bgWarmth}%)
                 </label>
@@ -899,21 +906,245 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-                <div className="flex space-x-2 pt-4">
-                  <button
-                    onClick={handleRestart}
-                    className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors"
-                  >
-                    Restart
-                  </button>
-                   <button
-                    onClick={handleExportHtml}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors"
-                  >
-                    Export as HTML
-                  </button>
+            </div>
+            <div className="pt-4 mt-auto">
+              <button
+                onClick={handleRestart}
+                className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors"
+              >
+                Restart Animation
+              </button>
+            </div>
+          </>
+        );
+      case 'metronome':
+        return (
+          <>
+            <div className="pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label="Back to main menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    <span>Metronome</span>
+                </button>
+            </div>
+            <div className="flex-grow overflow-y-auto pr-1 -mr-2 space-y-6">
+                <label htmlFor="metronome-toggle" className="flex items-center justify-between cursor-pointer">
+                  <span className="text-md font-medium text-slate-800 dark:text-slate-200">
+                    Enable Metronome
+                  </span>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      id="metronome-toggle"
+                      className="sr-only"
+                      checked={metronomeEnabled}
+                      onChange={(e) => handleSettingChange('metronomeEnabled', e.target.checked)}
+                    />
+                    <div className="block bg-slate-300 dark:bg-slate-600 w-12 h-7 rounded-full"></div>
+                    <div className={`dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${metronomeEnabled ? 'translate-x-5 bg-blue-500' : ''}`}></div>
+                  </div>
+                </label>
+              
+              <div className={`p-4 rounded-lg bg-slate-100 dark:bg-slate-900/50 transition-opacity ${metronomeEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
+                <div className="space-y-4">
+                  <div>
+                      <label className="block text-sm font-medium text-center text-slate-700 dark:text-slate-300 mb-2">
+                        Beats Per Minute
+                      </label>
+                      <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSettingChange('metronomeBPM', Math.max(40, metronomeBPM - 1))}
+                            disabled={!metronomeEnabled}
+                            className="px-2 py-1 rounded-md bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"
+                          >
+                            -
+                          </button>
+                          <div className="flex-grow text-center text-lg font-mono px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded-md">
+                            {metronomeBPM}
+                          </div>
+                          <button
+                             onClick={() => handleSettingChange('metronomeBPM', Math.min(200, metronomeBPM + 1))}
+                            disabled={!metronomeEnabled}
+                            className="px-2 py-1 rounded-md bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"
+                          >
+                            +
+                          </button>
+                      </div>
+                      <input
+                        type="range" min="40" max="200" value={metronomeBPM}
+                        onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
+                        className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer mt-3"
+                        disabled={!metronomeEnabled}
+                      />
+                  </div>
+                  <div>
+                    <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        Sound
+                    </label>
+                    <select
+                        id="metronome-sound"
+                        value={metronomeSound}
+                        onChange={(e) => handleSettingChange('metronomeSound', e.target.value as 'click' | 'beep')}
+                        className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        disabled={!metronomeEnabled}
+                    >
+                        <option value="click">Click</option>
+                        <option value="beep">Beep</option>
+                    </select>
+                  </div>
                 </div>
-            
+              </div>
+            </div>
+          </>
+        )
+      default: // 'main'
+        return (
+          <>
+            <div className="flex items-center pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
+                <div className="w-8"> {/* Spacer to align title */}</div>
+                <h2 className="text-lg font-semibold text-center flex-grow text-slate-800 dark:text-slate-200">Settings</h2>
+                <button onClick={() => setIsPanelOpen(false)} className="p-2 -mr-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label="Close settings panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+            <div className="flex-grow overflow-y-auto pt-4 pr-1 -mr-2 space-y-4">
+               <div>
+                  <h3 className="mb-2 text-md font-semibold text-slate-800 dark:text-slate-200">Presets</h3>
+                  <div className="space-y-2 mb-4">
+                    <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Load Preset
+                    </label>
+                    <div className="flex gap-2 items-center">
+                      <select
+                        id="preset-select"
+                        value={selectedPreset}
+                        onChange={handlePresetSelect}
+                        className="flex-grow min-w-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        aria-label="Load a preset"
+                      >
+                        <option value="">Select a preset...</option>
+                        <optgroup label="Defaults">
+                          {defaultPresets.map(p => <option key={p.name} value={`default:${p.name}`}>{p.name}</option>)}
+                        </optgroup>
+                        {customPresets.length > 0 && (
+                          <optgroup label="Custom">
+                            {customPresets.map(p => <option key={p.name} value={`custom:${p.name}`}>{p.name}</option>)}
+                          </optgroup>
+                        )}
+                      </select>
+                      <button 
+                        onClick={handleDeleteSelectedPreset} 
+                        disabled={!selectedPreset.startsWith('custom:')}
+                        title="Delete selected custom preset"
+                        aria-label="Delete selected custom preset"
+                        className="p-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition-colors disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                           <path fillRule="evenodd" d="M16.5 4.478v.227a48.816 48.816 0 013.878.512.75.75 0 11-.256 1.478l-.209-.035-1.005 13.07a3 3 0 01-2.991 2.77H8.084a3 3 0 01-2.991-2.77L4.087 6.66l-.209.035a.75.75 0 01-.256-1.478A48.567 48.567 0 017.5 4.705v-.227c0-1.564 1.213-2.9 2.816-2.951a52.662 52.662 0 013.369 0c1.603.051 2.815 1.387 2.815 2.951zm-6.136-1.452a51.196 51.196 0 013.273 0C14.39 3.05 15 3.684 15 4.478v.113a49.488 49.488 0 00-6 0v-.113c0-.794.609-1.428 1.364-1.452zm-.355 5.945a.75.75 0 10-1.5.058l.347 9a.75.75 0 101.499-.058l-.347-9zm5.48.058a.75.75 0 10-1.499-.058l-.347 9a.75.75 0 001.5.058l.347-9z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-2 pt-2">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Save Current Settings</p>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        value={newPresetName} 
+                        onChange={e => setNewPresetName(e.target.value)} 
+                        placeholder="Preset name..." 
+                        className="flex-grow min-w-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        aria-label="New preset name"
+                      />
+                      <button 
+                        onClick={savePreset} 
+                        disabled={!newPresetName.trim()} 
+                        title="Save current settings as a preset"
+                        aria-label="Save current settings as a preset"
+                        className="p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed"
+                      >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                          </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <hr className="border-slate-200 dark:border-slate-700"/>
+                <div>
+                  <ul className="space-y-2">
+                    <li>
+                      <button onClick={() => setPanelView('visuals')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">Visual Settings</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                      </button>
+                    </li>
+                     <li>
+                      <button onClick={() => setPanelView('metronome')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">Metronome</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+            </div>
+            <div className="pt-4 mt-auto">
+               <button
+                onClick={handleExportHtml}
+                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors"
+              >
+                Export as HTML
+              </button>
+            </div>
+          </>
+        )
+    }
+  }
+
+
+  return (
+    <main 
+      className={`relative flex items-center justify-center min-h-screen transition-colors duration-500 overflow-hidden`}
+      style={{ backgroundColor: bgColor }}
+    >
+      {!isPanelOpen && (
+        <button
+          onClick={() => {
+            setIsPanelOpen(true);
+            setPanelView('main'); // Reset to main view when opening
+          }}
+          className="absolute top-4 left-4 z-30 p-2 space-y-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md border border-slate-200 dark:border-slate-700 transition-opacity hover:opacity-80"
+          aria-label="Toggle settings panel"
+        >
+          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
+          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
+          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
+        </button>
+      )}
+        
+        {isPanelOpen && (
+            <div 
+                className="fixed inset-0 bg-black/30 z-10 transition-opacity duration-500" 
+                onClick={() => setIsPanelOpen(false)}
+                aria-hidden="true"
+            ></div>
+        )}
+
+        <div 
+          ref={panelRef}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          className={`fixed top-0 left-0 h-full z-20 transition-transform duration-500 ease-in-out ${isPanelOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        >
+          <div className="w-64 sm:w-80 overflow-y-auto p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700 h-full flex flex-col">
+            {renderPanelContent()}
           </div>
         </div>
         
