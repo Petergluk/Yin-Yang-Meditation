@@ -2,7 +2,7 @@
 export default {
   content: [
     "./index.html",
-    "./**/*.{ts,tsx}",
+    "./App.tsx", // More specific and reliable path
   ],
   darkMode: 'class',
   theme: {

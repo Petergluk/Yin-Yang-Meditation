@@ -483,7 +483,7 @@ const App: React.FC = () => {
             const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
             const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
             const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
-            const lightEyeColor = lerpColor('#ffffff', '#000000', colorInversionFactor);
+            const lightEyeColor = lerpColor('#ffffff', '#dark', colorInversionFactor);
 
             const pulsePeriod = settings.pulseSpeed * 1000;
             const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
@@ -658,14 +658,14 @@ const App: React.FC = () => {
         </button>
 
         <div className={`absolute top-0 left-0 h-full z-20 transition-transform duration-500 ease-in-out ${isPanelOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="w-64 md:w-80 h-full overflow-y-auto p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700">
+          <div className="w-64 md:w-80 overflow-y-auto p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700 h-full">
             <div className="pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
               <h2 className="text-lg font-semibold text-center text-slate-800 dark:text-slate-200">Settings</h2>
             </div>
-            <div className="space-y-4">
+            
               {/* Presets Section */}
-              <div className="space-y-4">
-                <div className="space-y-2">
+              <div className="mb-4">
+                <div className="space-y-2 mb-4">
                   <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                     Load Preset
                   </label>
@@ -719,8 +719,8 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <hr className="border-slate-200 dark:border-slate-700" />
-              <div>
+              <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Rotation Speed ({rotationSpeed}s)
                 </label>
@@ -730,9 +730,9 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <hr className="border-slate-200 dark:border-slate-700" />
-               <p className="text-center font-semibold text-slate-700 dark:text-slate-300">Main Symbol</p>
-               <div>
+              <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+               <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Main Symbol</p>
+               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Border Width ({borderWidth.toFixed(1)})
                 </label>
@@ -742,7 +742,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Glow Spread ({glowSize}%)
                 </label>
@@ -752,7 +752,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Breath Speed ({breathSpeed}s)
                 </label>
@@ -762,7 +762,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Min Breath Size ({minBreathPercent}%)
                 </label>
@@ -772,7 +772,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Max Breath Size ({maxBreathPercent}%)
                 </label>
@@ -782,7 +782,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Curve Speed ({curveSpeed}s)
                 </label>
@@ -792,7 +792,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Max Curve Radius ({maxCurveRadius.toFixed(1)})
                 </label>
@@ -802,9 +802,9 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-               <hr className="border-slate-200 dark:border-slate-700" />
-               <p className="text-center font-semibold text-slate-700 dark:text-slate-300">Eyes Pulse</p>
-              <div>
+               <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+               <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Eyes Pulse</p>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Pulse Speed ({pulseSpeed}s)
                 </label>
@@ -814,7 +814,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Min Radius ({minRadius.toFixed(1)})
                 </label>
@@ -824,7 +824,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Max Radius ({maxRadius.toFixed(1)})
                 </label>
@@ -834,7 +834,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Angle Offset ({eyeAngleOffset.toFixed(0)}°)
                 </label>
@@ -844,7 +844,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Eye Color Inversion ({eyeColorInversion}%)
                 </label>
@@ -854,7 +854,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <div>
+              <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Inversion Speed ({eyeColorSpeed}s)
                 </label>
@@ -864,7 +864,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-               <div className="pt-2">
+               <div className="pt-2 mb-4">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -877,9 +877,9 @@ const App: React.FC = () => {
                   </span>
                 </label>
               </div>
-              <hr className="border-slate-200 dark:border-slate-700" />
-               <p className="text-center font-semibold text-slate-700 dark:text-slate-300">Background</p>
-               <div>
+              <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+               <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Background</p>
+               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Lightness ({bgLightness}%)
                 </label>
@@ -889,7 +889,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-               <div>
+               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Warmth ({bgWarmth}%)
                 </label>
@@ -913,7 +913,7 @@ const App: React.FC = () => {
                     Export as HTML
                   </button>
                 </div>
-            </div>
+            
           </div>
         </div>
         
