@@ -73,8 +73,8 @@ const YinYang: React.FC<YinYangProps> = ({
 
   const pathD = `M${center},${center + mainRadius} A${curveRadius} ${curveRadius} 0 0 0 ${center} ${center} A${curveRadius} ${curveRadius} 0 0 1 ${center} ${center - mainRadius} A${mainRadius} ${mainRadius} 0 0 1 ${center} ${center + mainRadius} Z`;
   
-  const eyeCenterYTop = center - mainRadius / 2;
-  const eyeCenterYBottom = center + mainRadius / 2;
+  const eyeCenterYTop = -mainRadius / 2;
+  const eyeCenterYBottom = mainRadius / 2;
   
   const minScale = minRadius / maxRadius;
 
@@ -111,9 +111,9 @@ const YinYang: React.FC<YinYangProps> = ({
                   d={pathD}
                   fill="#ffffff"
               />
-              <g transform={`rotate(${eyeAngleOffset} ${center} ${center})`}>
-                <circle cx={center} cy={eyeCenterYTop} r={maxRadius} className="animate-pulse-scale" style={{...basePulseStyle, fill: darkEyeColor, transformOrigin: `${center}px ${eyeCenterYTop}px`}} />
-                <circle cx={center} cy={eyeCenterYBottom} r={maxRadius} className="animate-pulse-scale" style={{...invertedPulseStyle, fill: lightEyeColor, transformOrigin: `${center}px ${eyeCenterYBottom}px`}} />
+              <g transform={`translate(${center} ${center}) rotate(${eyeAngleOffset})`}>
+                <circle cx={0} cy={eyeCenterYTop} r={maxRadius} className="animate-pulse-scale" style={{...basePulseStyle, fill: darkEyeColor, transformOrigin: `0px ${eyeCenterYTop}px`}} />
+                <circle cx={0} cy={eyeCenterYBottom} r={maxRadius} className="animate-pulse-scale" style={{...invertedPulseStyle, fill: lightEyeColor, transformOrigin: `0px ${eyeCenterYBottom}px`}} />
               </g>
           </svg>
       </div>
@@ -300,7 +300,7 @@ const App: React.FC = () => {
   
     if (metronomeEnabled) {
       const audioCtx = audioCtxRef.current;
-      if (!audioCtx) return;
+      if (!audioCtx || audioCtx.state !== 'running') return;
   
       const playSound = () => {
         const time = audioCtx.currentTime;
@@ -443,9 +443,16 @@ const App: React.FC = () => {
             
             const settings = ${JSON.stringify(settings)};
             let audioCtx = null;
-            if (settings.metronomeEnabled) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
+            
+            const initAudio = () => {
+                if (settings.metronomeEnabled && !audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    if (audioCtx.state === 'suspended') {
+                        audioCtx.resume();
+                    }
+                }
+            };
+            initAudio(); // Initialize on first click
 
             const hexToRgb = (hex) => {
                 const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
@@ -484,7 +491,7 @@ const App: React.FC = () => {
             eyeGroup.append(darkEyeCircle, lightEyeCircle);
 
             const center = 50; const mainRadius = 50 - (settings.borderWidth / 2);
-            const eyeCenterYTop = center - mainRadius / 2; const eyeCenterYBottom = center + mainRadius / 2;
+            const eyeCenterYTop = -mainRadius / 2; const eyeCenterYBottom = mainRadius / 2;
 
             symbolWrapper.style.position = 'relative'; symbolWrapper.style.display = 'flex';
             symbolWrapper.style.alignItems = 'center'; symbolWrapper.style.justifyContent = 'center';
@@ -494,17 +501,18 @@ const App: React.FC = () => {
             bgCircle.setAttribute('cx', center); bgCircle.setAttribute('cy', center); bgCircle.setAttribute('r', mainRadius);
             bgCircle.setAttribute('fill', '#000000'); bgCircle.setAttribute('stroke', '#000000'); bgCircle.setAttribute('stroke-width', settings.borderWidth);
             whitePath.setAttribute('fill', '#ffffff');
-            eyeGroup.setAttribute('transform', \`rotate(\${settings.eyeAngleOffset} \${center} \${center})\`);
-            darkEyeCircle.setAttribute('cx', center); darkEyeCircle.setAttribute('cy', eyeCenterYTop);
+            eyeGroup.setAttribute('transform', \`translate(\${center} \${center}) rotate(\${settings.eyeAngleOffset})\`);
+            darkEyeCircle.setAttribute('cx', 0); darkEyeCircle.setAttribute('cy', eyeCenterYTop);
             darkEyeCircle.setAttribute('r', settings.maxRadius);
-            darkEyeCircle.style.transformOrigin = \`\${center}px \${eyeCenterYTop}px\`;
-            lightEyeCircle.setAttribute('cx', center); lightEyeCircle.setAttribute('cy', eyeCenterYBottom);
+            darkEyeCircle.style.transformOrigin = \`0px \${eyeCenterYTop}px\`;
+            lightEyeCircle.setAttribute('cx', 0); lightEyeCircle.setAttribute('cy', eyeCenterYBottom);
             lightEyeCircle.setAttribute('r', settings.maxRadius);
-            lightEyeCircle.style.transformOrigin = \`\${center}px \${eyeCenterYBottom}px\`;
+            lightEyeCircle.style.transformOrigin = \`0px \${eyeCenterYBottom}px\`;
             
             let metronomePulse = false;
             if (settings.metronomeEnabled && audioCtx) {
                 const playSound = () => {
+                    if (audioCtx.state !== 'running') return;
                     const time = audioCtx.currentTime;
                     if (settings.metronomeSound === 'beep') {
                         const osc = audioCtx.createOscillator();
@@ -556,7 +564,7 @@ const App: React.FC = () => {
                 const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
                 const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
                 const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
-                const lightEyeColor = lerpColor('#ffffff', '#dark', colorInversionFactor);
+                const lightEyeColor = lerpColor('#ffffff', '#000000', colorInversionFactor);
                 const pulsePeriod = settings.pulseSpeed * 1000;
                 const minEyeScale = settings.minRadius / settings.maxRadius;
                 const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
@@ -601,14 +609,33 @@ const App: React.FC = () => {
   };
   
   const handleSettingChange = (key: keyof Settings, value: string | number | boolean) => {
-    if (key === 'metronomeEnabled' && value === true) {
-        if (!audioCtxRef.current) {
-            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        if (audioCtxRef.current.state === 'suspended') {
-            audioCtxRef.current.resume();
-        }
+    // Special handling for metronome enabling to deal with AudioContext policies
+    if (key === 'metronomeEnabled') {
+      if (value === true) {
+        const initializeAndStart = async () => {
+          try {
+            if (!audioCtxRef.current) {
+              audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+            }
+            if (audioCtxRef.current.state === 'suspended') {
+              await audioCtxRef.current.resume();
+            }
+            // Only set enabled to true after context is successfully running
+            setSettings(prev => ({ ...prev, metronomeEnabled: true }));
+          } catch (error) {
+            console.error("Failed to initialize or resume AudioContext:", error);
+            // Optionally, provide feedback to the user that audio could not be started
+          }
+        };
+        initializeAndStart();
+      } else {
+        // Just turn it off
+        setSettings(prev => ({ ...prev, metronomeEnabled: false }));
+      }
+      setSelectedPreset(''); // Deselect preset when this is toggled
+      return;
     }
+
     setSettings(prev => ({ ...prev, [key]: value as any }));
     setSelectedPreset(''); // Deselect preset when a manual change is made
   };
@@ -1020,8 +1047,28 @@ const App: React.FC = () => {
                 </button>
             </div>
             <div className="flex-grow overflow-y-auto pt-4 pr-1 -mr-2 space-y-4">
+                <div>
+                  <ul className="space-y-2">
+                    <li>
+                      <button onClick={() => setPanelView('visuals')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">Visual Settings</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                      </button>
+                    </li>
+                     <li>
+                      <button onClick={() => setPanelView('metronome')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                          <span className="font-medium text-slate-800 dark:text-slate-200">Metronome</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+                <hr className="border-slate-200 dark:border-slate-700"/>
                <div>
-                  <h3 className="mb-2 text-md font-semibold text-slate-800 dark:text-slate-200">Presets</h3>
                   <div className="space-y-2 mb-4">
                     <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                       Load Preset
@@ -1034,12 +1081,10 @@ const App: React.FC = () => {
                         className="flex-grow min-w-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
                         aria-label="Load a preset"
                       >
-                        <option value="">Select a preset...</option>
-                        <optgroup label="Defaults">
-                          {defaultPresets.map(p => <option key={p.name} value={`default:${p.name}`}>{p.name}</option>)}
-                        </optgroup>
+                        <option value="" disabled>Select a preset...</option>
+                        {defaultPresets.map(p => <option key={p.name} value={`default:${p.name}`}>{p.name}</option>)}
                         {customPresets.length > 0 && (
-                          <optgroup label="Custom">
+                          <optgroup label="My Presets">
                             {customPresets.map(p => <option key={p.name} value={`custom:${p.name}`}>{p.name}</option>)}
                           </optgroup>
                         )}
@@ -1081,27 +1126,6 @@ const App: React.FC = () => {
                       </button>
                     </div>
                   </div>
-                </div>
-                <hr className="border-slate-200 dark:border-slate-700"/>
-                <div>
-                  <ul className="space-y-2">
-                    <li>
-                      <button onClick={() => setPanelView('visuals')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">Visual Settings</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                      </button>
-                    </li>
-                     <li>
-                      <button onClick={() => setPanelView('metronome')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">Metronome</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                      </button>
-                    </li>
-                  </ul>
                 </div>
             </div>
             <div className="pt-4 mt-auto">
