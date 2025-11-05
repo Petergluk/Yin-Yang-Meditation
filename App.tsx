@@ -150,7 +150,7 @@ const App: React.FC = () => {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [currentDynamicBPM, setCurrentDynamicBPM] = useState(initialSettings.metronomeBPM);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const [isUiVisible, setIsUiVisible] = useState(true);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metronomeTimeoutRef = useRef<number | null>(null);
@@ -183,27 +183,16 @@ const App: React.FC = () => {
   // --- UI Interactivity Effects ---
   useEffect(() => {
     const handleActivity = () => {
-      setIsHeaderVisible(true);
+      setIsUiVisible(true);
       if (activityTimeoutRef.current) {
         clearTimeout(activityTimeoutRef.current);
       }
-      // Do not hide controls if the metronome is enabled
-      if (metronomeEnabled) {
-        return;
-      }
       activityTimeoutRef.current = window.setTimeout(() => {
-        setIsHeaderVisible(false);
+        setIsUiVisible(false);
       }, 5000);
     };
 
-    if (metronomeEnabled) {
-      setIsHeaderVisible(true);
-      if (activityTimeoutRef.current) {
-        clearTimeout(activityTimeoutRef.current);
-      }
-    } else {
-       handleActivity(); // Initial call or reset after metronome stops
-    }
+    handleActivity(); // Initial call
 
     window.addEventListener('mousemove', handleActivity);
     window.addEventListener('touchstart', handleActivity);
@@ -215,7 +204,7 @@ const App: React.FC = () => {
         clearTimeout(activityTimeoutRef.current);
       }
     };
-  }, [metronomeEnabled]);
+  }, []);
 
   useEffect(() => {
     try {
@@ -1614,7 +1603,7 @@ const App: React.FC = () => {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      <div className={`fixed top-4 left-4 right-4 z-30 justify-between items-center transition-opacity duration-700 ${isPanelOpen ? 'hidden' : 'flex'} ${isHeaderVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      <div className={`fixed top-4 left-4 right-4 z-30 justify-between items-center transition-opacity duration-700 ${isPanelOpen ? 'hidden' : 'flex'} ${isUiVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           <button
             onClick={() => {
               setIsPanelOpen(true);
@@ -1640,7 +1629,7 @@ const App: React.FC = () => {
 
       {/* Main Screen Metronome UI */}
        {showMetronomeControl && (
-        <div className={`fixed bottom-0 left-0 right-0 p-4 flex justify-center sm:justify-start z-10 transition-opacity duration-700 ${isHeaderVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className={`fixed bottom-0 left-0 right-0 p-4 flex justify-center sm:justify-start z-10 transition-opacity duration-700 ${isUiVisible || (metronomeEnabled && speedTrainerEnabled) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           <button
             onClick={handleMetronomeToggle}
             className={`relative w-16 h-16 rounded-full transition-all duration-300 flex items-center justify-center shadow-lg text-slate-800 dark:text-slate-200
@@ -1655,14 +1644,13 @@ const App: React.FC = () => {
               </svg>
             )}
           </button>
-          
-          <div className={`fixed bottom-0 left-0 right-0 h-1 transition-opacity duration-300 ${metronomeEnabled && speedTrainerEnabled ? 'opacity-100' : 'opacity-0'}`}>
-            <div className="bg-slate-300/50 dark:bg-slate-600/50 h-full">
-                <div className="bg-blue-600 h-full transition-all duration-500 ease-linear" style={{ width: `${progressPercent}%` }}></div>
-            </div>
-          </div>
         </div>
       )}
+      <div className={`fixed bottom-0 left-0 right-0 h-1 transition-opacity duration-300 ${metronomeEnabled && speedTrainerEnabled ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="bg-slate-300/50 dark:bg-slate-600/50 h-full">
+            <div className="bg-blue-600 h-full transition-all duration-500 ease-linear" style={{ width: `${progressPercent}%` }}></div>
+        </div>
+      </div>
         
       {isPanelOpen && (
           <div 
