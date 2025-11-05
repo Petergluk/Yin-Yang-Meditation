@@ -308,7 +308,8 @@ const NumberInput: React.FC<{
     min: number;
     max: number;
     step: number;
-}> = ({ label, value, onChange, min, max, step }) => {
+    isDark: boolean;
+}> = ({ label, value, onChange, min, max, step, isDark }) => {
     const [inputValue, setInputValue] = useState(String(value));
     const intervalRef = useRef<number | null>(null);
     const timeoutRef = useRef<number | null>(null);
@@ -397,18 +398,24 @@ const NumberInput: React.FC<{
             onChange(clampedValue);
         }
     };
+    
+    const textColor = isDark ? 'text-slate-200' : 'text-slate-700';
+    const bgColor = isDark ? 'bg-slate-700' : 'bg-slate-200';
+    const buttonBgColor = isDark ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-300 hover:bg-slate-400';
+    const inputTextColor = isDark ? 'text-slate-100' : 'text-slate-800';
+
 
     return (
         <div className="space-y-1">
-            <label htmlFor={`input-${label}`} className="block text-sm font-medium text-slate-700 dark:text-slate-200">{label}</label>
-            <div className="flex items-center justify-between p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
+            <label htmlFor={`input-${label}`} className={`block text-sm font-medium ${textColor}`}>{label}</label>
+            <div className={`flex items-center justify-between p-1 ${bgColor} rounded-lg`}>
                 <button 
                     onMouseDown={() => startCounter(false)} 
                     onMouseUp={stopCounter} 
                     onMouseLeave={stopCounter}
                     onTouchStart={(e) => { e.preventDefault(); startCounter(false); }}
                     onTouchEnd={stopCounter}
-                    className="px-3 py-1 rounded-md bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 transition-colors select-none touch-manipulation"
+                    className={`px-3 py-1 rounded-md ${buttonBgColor} transition-colors select-none touch-manipulation`}
                     aria-label={`Decrease ${label}`}
                 >-</button>
                 <input
@@ -420,7 +427,7 @@ const NumberInput: React.FC<{
                     onChange={handleInputChange}
                     onBlur={handleInputBlur}
                     onKeyDown={handleInputKeyDown}
-                    className="w-16 text-center text-lg font-mono font-semibold text-slate-800 dark:text-slate-100 bg-transparent border-none focus:ring-0 p-0"
+                    className={`w-16 text-center text-lg font-mono font-semibold ${inputTextColor} bg-transparent border-none focus:ring-0 p-0`}
                 />
                 <button 
                     onMouseDown={() => startCounter(true)} 
@@ -428,7 +435,7 @@ const NumberInput: React.FC<{
                     onMouseLeave={stopCounter}
                     onTouchStart={(e) => { e.preventDefault(); startCounter(true); }}
                     onTouchEnd={stopCounter}
-                    className="px-3 py-1 rounded-md bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 transition-colors select-none touch-manipulation"
+                    className={`px-3 py-1 rounded-md ${buttonBgColor} transition-colors select-none touch-manipulation`}
                     aria-label={`Increase ${label}`}
                 >+</button>
             </div>
@@ -451,6 +458,7 @@ const App: React.FC = () => {
   const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome' | 'interface'>('main');
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [currentDynamicBPM, setCurrentDynamicBPM] = useState(initialSettings.metronomeBPM);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metronomeTimeoutRef = useRef<number | null>(null);
@@ -833,8 +841,15 @@ const App: React.FC = () => {
     const handleResize = () => {
       setViewportSize({width: window.innerWidth, height: window.innerHeight});
     };
+    const handleFullscreenChange = () => {
+        setIsFullscreen(!!document.fullscreenElement);
+    };
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+        window.removeEventListener('resize', handleResize);
+        document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    }
   }, []);
 
   const handleRestart = () => {
@@ -905,10 +920,19 @@ const App: React.FC = () => {
 
 
   useEffect(() => {
-    if (bgLightness < 50) {
+    const isDark = bgLightness < 50;
+    if (isDark) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
+    }
+    // Force text color update for panel
+    const panel = panelRef.current;
+    if (panel) {
+        // This is a bit of a hack, but ensures reactivity in environments where CSS might lag
+        // or where class-based theme switching has issues (like on iOS Safari sometimes).
+        const textColor = isDark ? '#e2e8f0' : '#334155'; // slate-200 or slate-700
+        panel.style.color = textColor;
     }
   }, [bgLightness]);
   
@@ -1060,26 +1084,8 @@ const App: React.FC = () => {
   
   const handleSettingChange = (key: keyof Settings, value: any) => {
     if (key === 'metronomeEnabled') {
-      if (value === true) {
-        handleRestart();
-        const initializeAndStart = async () => {
-          try {
-            if (!audioCtxRef.current) {
-              audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-            }
-            if (audioCtxRef.current.state === 'suspended') {
-              await audioCtxRef.current.resume();
-            }
-            setSettings(prev => ({ ...prev, metronomeEnabled: true }));
-          } catch (error) {
-            console.error("Failed to initialize or resume AudioContext:", error);
-            alert("Could not start audio. Please interact with the page and try again.");
-          }
-        };
-        initializeAndStart();
-      } else {
-        setSettings(prev => ({ ...prev, metronomeEnabled: false }));
-      }
+      handleRestart();
+      setSettings(prev => ({ ...prev, metronomeEnabled: value }));
       setSelectedPreset('');
       return;
     }
@@ -1093,6 +1099,31 @@ const App: React.FC = () => {
     setSettings(prev => ({ ...prev, [key]: value }));
     setSelectedPreset('');
   };
+  
+  const handleMetronomeToggle = async () => {
+    if (!audioCtxRef.current) {
+        try {
+            // Use a specific sample rate if needed, but default is usually fine
+            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        } catch (error) {
+            console.error("Failed to create AudioContext:", error);
+            alert("Audio is not supported on this browser.");
+            return;
+        }
+    }
+    // Always try to resume, as it's required after any user gesture on most browsers
+    if (audioCtxRef.current.state === 'suspended') {
+        try {
+            await audioCtxRef.current.resume();
+        } catch (error) {
+            console.error("Failed to resume AudioContext:", error);
+            // This might fail if not triggered by a direct user gesture.
+            // The UI will still update, but sound won't play until another interaction.
+        }
+    }
+    handleSettingChange('metronomeEnabled', !metronomeEnabled);
+};
+
 
   const handleMinRadiusChange = (value: number) => {
     handleSettingChange('minRadius', Math.min(value, maxRadius));
@@ -1165,7 +1196,9 @@ const App: React.FC = () => {
   };
   
   const handleTouchStart = (e: React.TouchEvent) => {
-      if (panelRef.current && panelRef.current.contains(e.target as Node)) {
+      // Only initiate swipe-to-close if the touch starts on the panel itself,
+      // not on interactive elements inside it like buttons or inputs.
+      if (panelRef.current && e.target === panelRef.current) {
           setTouchStartY(e.targetTouches[0].clientY);
       }
   };
@@ -1174,6 +1207,7 @@ const App: React.FC = () => {
       if (touchStartY === null) return;
       const touchEndY = e.changedTouches[0].clientY;
       const deltaY = touchEndY - touchStartY;
+      // Check for a downward swipe of sufficient distance
       if (deltaY > 50) {
           setIsPanelOpen(false);
       }
@@ -1223,8 +1257,21 @@ const App: React.FC = () => {
 
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = Math.round(totalSeconds % 60);
-    return `Approx. ${minutes} min${minutes !== 1 ? 's' : ''} ${seconds} sec${seconds !== 1 ? 's' : ''} taken to reach ${targetBPM} BPM`;
+    return `Approx. ${minutes} min${minutes !== 1 ? 's' : ''} ${seconds} sec${seconds !== 1 ? 's' : ''} to reach ${targetBPM} BPM`;
   };
+  
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+            console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+        });
+    } else {
+        if (document.exitFullscreen) {
+            document.exitFullscreen();
+        }
+    }
+  };
+
 
   const baseSize = (maxBreathPercent / 100) * Math.min(viewportSize.width, viewportSize.height) * 0.9;
 
@@ -1258,45 +1305,69 @@ const App: React.FC = () => {
   };
   
   const renderPanelContent = () => {
+    const isDark = bgLightness < 50;
+    const textColor = isDark ? 'text-slate-100' : 'text-slate-800';
+    const secondaryTextColor = isDark ? 'text-slate-200' : 'text-slate-700';
+    const mutedTextColor = isDark ? 'text-slate-400' : 'text-slate-600';
+    const closeIconColor = isDark ? 'text-slate-200' : 'text-slate-800';
+    const borderColor = isDark ? 'border-slate-700/50' : 'border-slate-200/50';
+    const buttonBg = isDark ? 'bg-slate-700' : 'bg-slate-200';
+    const selectBg = isDark ? 'bg-slate-700' : 'bg-slate-200';
+    const selectBorder = isDark ? 'border-slate-600/50' : 'border-slate-300/50';
+    const hoverBg = isDark ? 'hover:bg-slate-500/10' : 'hover:bg-slate-500/10';
+    const subMenuBg = isDark ? 'bg-slate-500/5' : 'bg-slate-500/5';
+    const actionButtonBg = isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-slate-200 hover:bg-slate-300';
+    const finalButtonBg = isDark ? 'bg-slate-800 text-slate-200 hover:bg-slate-700' : 'bg-slate-600 text-white hover:bg-slate-700';
+
+
+    const SubMenuHeader: React.FC<{ title: string }> = ({ title }) => (
+      <div className={`pb-4 mb-4 border-b ${borderColor} flex items-center justify-between`}>
+          <button onMouseDown={() => setPanelView('main')} className={`flex items-center gap-2 w-full text-left text-xl font-bold ${textColor} p-2 -ml-2 rounded-lg ${hoverBg} transition-colors`} aria-label="Back to main menu">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              <span>{title}</span>
+          </button>
+          <button onMouseDown={() => setIsPanelOpen(false)} className={`p-2 -mr-2 rounded-full ${hoverBg} transition-colors`} aria-label="Close settings panel">
+              <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${closeIconColor}`} viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+              </svg>
+          </button>
+      </div>
+    );
+    
     switch(panelView) {
       case 'interface':
         return (
           <>
-            <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-100 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span>Interface Settings</span>
-                </button>
-            </div>
+            <SubMenuHeader title="Interface Settings" />
             <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 pt-4 custom-scrollbar">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Panel Opacity ({panelOpacity}%)
                 </label>
                 <input
                   type="range" min="20" max="100" value={panelOpacity}
                   onChange={(e) => handleSettingChange('panelOpacity', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Panel Blur ({panelBlur}px)
                 </label>
                 <input
                   type="range" min="0" max="40" value={panelBlur}
                   onChange={(e) => handleSettingChange('panelBlur', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
-              <hr className="border-slate-200/50 dark:border-slate-700/50" />
+              <hr className={borderColor} />
               <div>
-                <h3 className="text-md font-semibold text-slate-800 dark:text-slate-100 mb-3">Main Screen Elements</h3>
+                <h3 className={`text-md font-semibold ${textColor} mb-3`}>Main Screen Elements</h3>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-2 rounded-md">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Show Metronome Control</span>
+                    <span className={`text-sm font-medium ${secondaryTextColor}`}>Show Metronome Control</span>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input type="checkbox" checked={showMetronomeControl} onChange={(e) => handleSettingChange('showMetronomeControl', e.target.checked)} className="sr-only peer" />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
@@ -1310,49 +1381,42 @@ const App: React.FC = () => {
       case 'visuals':
         return (
           <>
-            <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-100 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span>Visual Settings</span>
-                </button>
-            </div>
+            <SubMenuHeader title="Visual Settings" />
             <div className="flex-grow overflow-y-auto pr-2 -mr-4 custom-scrollbar">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Rotation Speed ({rotationSpeed}s)
                 </label>
                 <input
                   type="range" min="2" max="180" value={rotationSpeed}
                   onChange={(e) => handleSettingChange('rotationSpeed', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
-              <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
-                <p className="text-center font-semibold text-slate-700 dark:text-slate-200 mb-4">Main Symbol</p>
+              <hr className={`${borderColor} my-6`} />
+                <p className={`text-center font-semibold ${secondaryTextColor} mb-4`}>Main Symbol</p>
                 <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Border Width ({borderWidth.toFixed(1)})
                 </label>
                 <input
                   type="range" min="0" max="5" step="0.1" value={borderWidth}
                   onChange={(e) => handleSettingChange('borderWidth', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Glow Spread ({glowSize}%)
                 </label>
                 <input
                   type="range" min="0" max="100" value={glowSize}
                   onChange={(e) => handleSettingChange('glowSize', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                     Breath Speed ({breathSpeed}s)
                     {syncBreathWithMetronome && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Synced)</span>}
                 </label>
@@ -1360,109 +1424,109 @@ const App: React.FC = () => {
                   type="range" min="1" max="180" value={breathSpeed}
                   onChange={(e) => handleSettingChange('breathSpeed', Number(e.target.value))}
                   disabled={syncBreathWithMetronome}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Min Breath Size ({minBreathPercent}%)
                 </label>
                 <input
                   type="range" min="10" max="99" step="1" value={minBreathPercent}
                   onChange={(e) => handleMinBreathPercentChange(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Max Breath Size ({maxBreathPercent}%)
                 </label>
                 <input
                   type="range" min="10" max="99" step="1" value={maxBreathPercent}
                   onChange={(e) => handleMaxBreathPercentChange(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Curve Speed ({curveSpeed}s)
                 </label>
                 <input
                   type="range" min="1" max="180" value={curveSpeed}
                   onChange={(e) => handleSettingChange('curveSpeed', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Max Curve Radius ({maxCurveRadius.toFixed(1)})
                 </label>
                 <input
                   type="range" min="25" max="35" step="0.1" value={maxCurveRadius}
                   onChange={(e) => handleSettingChange('maxCurveRadius', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
-                <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
-                <p className="text-center font-semibold text-slate-700 dark:text-slate-200 mb-4">Eyes Pulse</p>
+                <hr className={`${borderColor} my-6`} />
+                <p className={`text-center font-semibold ${secondaryTextColor} mb-4`}>Eyes Pulse</p>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Pulse Speed ({pulseSpeed}s)
                 </label>
                 <input
                   type="range" min="1" max="180" value={pulseSpeed}
                   onChange={(e) => handleSettingChange('pulseSpeed', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Min Radius ({minRadius.toFixed(1)})
                 </label>
                 <input
                   type="range" min="1" max="15" step="0.5" value={minRadius}
                   onChange={(e) => handleMinRadiusChange(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Max Radius ({maxRadius.toFixed(1)})
                 </label>
                 <input
                   type="range" min="1" max="15" step="0.5" value={maxRadius}
                   onChange={(e) => handleMaxRadiusChange(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Angle Offset ({eyeAngleOffset.toFixed(0)}°)
                 </label>
                 <input
                   type="range" min="-45" max="45" value={eyeAngleOffset}
                   onChange={(e) => handleSettingChange('eyeAngleOffset', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Eye Color Inversion ({eyeColorInversion}%)
                 </label>
                 <input
                   type="range" min="0" max="100" value={eyeColorInversion}
                   onChange={(e) => handleSettingChange('eyeColorInversion', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Inversion Speed ({eyeColorSpeed}s)
                 </label>
                 <input
                   type="range" min="1" max="180" value={eyeColorSpeed}
                   onChange={(e) => handleSettingChange('eyeColorSpeed', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
                 <div className="pt-2 mb-4">
@@ -1473,38 +1537,38 @@ const App: React.FC = () => {
                     onChange={(e) => handleSettingChange('invertPulsePhase', e.target.checked)}
                     className="h-4 w-4 text-slate-600 bg-slate-100 border-slate-300 rounded focus:ring-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-slate-600"
                   />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  <span className={`text-sm font-medium ${secondaryTextColor}`}>
                     Invert Pulse Phase
                   </span>
                 </label>
               </div>
-              <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
-                <p className="text-center font-semibold text-slate-700 dark:text-slate-200 mb-4">Background</p>
+              <hr className={`${borderColor} my-6`} />
+                <p className={`text-center font-semibold ${secondaryTextColor} mb-4`}>Background</p>
                 <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Lightness ({bgLightness}%)
                 </label>
                 <input
                   type="range" min="0" max="100" value={bgLightness}
                   onChange={(e) => handleSettingChange('bgLightness', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
                 <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                   Warmth ({bgWarmth}%)
                 </label>
                 <input
                   type="range" min="0" max="100" value={bgWarmth}
                   onChange={(e) => handleSettingChange('bgWarmth', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                 />
               </div>
             </div>
             <div className="pt-4 mt-auto">
               <button
                 onClick={handleRestart}
-                className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors"
+                className={`w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors ${finalButtonBg}`}
               >
                 Restart Animation
               </button>
@@ -1515,17 +1579,10 @@ const App: React.FC = () => {
         const timeToTargetStr = calculateTimeToTarget();
         return (
           <>
-            <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-100 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
-                    </svg>
-                    <span>Metronome</span>
-                </button>
-            </div>
+            <SubMenuHeader title="Metronome" />
             <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 flex flex-col custom-scrollbar">
               <button
-                onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
+                onClick={handleMetronomeToggle}
                 className={`w-full py-3 rounded-xl text-white text-xl font-bold transition-all duration-150 flex items-center justify-center shadow-lg
                             ${metronomeEnabled 
                                 ? 'bg-red-600 hover:bg-red-700' 
@@ -1537,7 +1594,7 @@ const App: React.FC = () => {
               
               <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-3">Accent Pattern</label>
+                    <label className={`block text-sm font-medium ${secondaryTextColor} mb-3`}>Accent Pattern</label>
                     <div className="grid grid-cols-4 gap-3">
                       {accentPattern.map((accent, index) => (
                         <button
@@ -1557,27 +1614,27 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-4">
                       <div>
-                          <label htmlFor="beats-per-measure" className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                          <label htmlFor="beats-per-measure" className={`block text-sm font-medium ${secondaryTextColor} mb-1`}>
                               Beats
                           </label>
                           <select
                               id="beats-per-measure"
                               value={beatsPerMeasure}
                               onChange={(e) => handleBeatsPerMeasureChange(Number(e.target.value))}
-                              className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                              className={`w-full px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
                           >
                               {[...Array(15)].map((_, i) => <option key={i+2} value={i+2}>{i+2}</option>)}
                           </select>
                       </div>
                       <div>
-                          <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                          <label htmlFor="metronome-sound" className={`block text-sm font-medium ${secondaryTextColor} mb-1`}>
                               Sound Kit
                           </label>
                           <select
                               id="metronome-sound"
                               value={metronomeSoundKit}
                               onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as MetronomeSoundKit)}
-                              className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                              className={`w-full px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
                           >
                               <option value="click">Click</option>
                               <option value="beep">Beep</option>
@@ -1590,10 +1647,10 @@ const App: React.FC = () => {
                       </div>
                   </div>
                 
-                <hr className="border-slate-200/50 dark:border-slate-700/50" />
+                <hr className={borderColor} />
                 
                 <div className="flex items-center justify-between">
-                    <label className="font-medium text-slate-800 dark:text-slate-100">Speed Trainer</label>
+                    <label className={`font-medium ${textColor}`}>Speed Trainer</label>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" checked={speedTrainerEnabled} onChange={(e) => handleSettingChange('speedTrainerEnabled', e.target.checked)} className="sr-only peer" />
                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
@@ -1603,35 +1660,35 @@ const App: React.FC = () => {
                 {speedTrainerEnabled ? (
                     <div className="space-y-4 p-4 bg-slate-500/10 rounded-xl">
                       <div className="grid grid-cols-2 gap-4">
-                        <NumberInput label="Start BPM" value={startBPM} onChange={v => handleSettingChange('startBPM', v)} min={20} max={400} step={1} />
-                        <NumberInput label="Target BPM" value={targetBPM} onChange={v => handleSettingChange('targetBPM', v)} min={20} max={400} step={1} />
-                        <NumberInput label="Increase By" value={increaseBy} onChange={v => handleSettingChange('increaseBy', v)} min={1} max={50} step={1} />
-                        <NumberInput label="Every Bar" value={everyNMeasures} onChange={v => handleSettingChange('everyNMeasures', v)} min={1} max={32} step={1} />
+                        <NumberInput label="Start BPM" value={startBPM} onChange={v => handleSettingChange('startBPM', v)} min={20} max={400} step={1} isDark={isDark} />
+                        <NumberInput label="Target BPM" value={targetBPM} onChange={v => handleSettingChange('targetBPM', v)} min={20} max={400} step={1} isDark={isDark} />
+                        <NumberInput label="Increase By" value={increaseBy} onChange={v => handleSettingChange('increaseBy', v)} min={1} max={50} step={1} isDark={isDark} />
+                        <NumberInput label="Every Bar" value={everyNMeasures} onChange={v => handleSettingChange('everyNMeasures', v)} min={1} max={32} step={1} isDark={isDark} />
                       </div>
-                      {timeToTargetStr && <p className="text-xs text-center text-slate-600 dark:text-slate-400 pt-2">{timeToTargetStr}</p>}
+                      {timeToTargetStr && <p className={`text-xs text-center ${mutedTextColor} pt-2`}>{timeToTargetStr}</p>}
                     </div>
                 ) : (
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                        <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                           BPM
                         </label>
-                        <span className="text-lg font-mono font-semibold text-slate-800 dark:text-slate-100">{metronomeBPM}</span>
+                        <span className={`text-lg font-mono font-semibold ${textColor}`}>{metronomeBPM}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                         <button onClick={() => handleSettingChange('metronomeBPM', Math.max(20, metronomeBPM - 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">-</button>
+                         <button onClick={() => handleSettingChange('metronomeBPM', Math.max(20, metronomeBPM - 1))} className={`p-2 rounded-full ${actionButtonBg} transition-colors`}>-</button>
                          <input
                           type="range" min="20" max="400" value={metronomeBPM}
                           onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
-                          className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                          className={`w-full h-2 ${buttonBg} rounded-lg appearance-none cursor-pointer`}
                         />
-                         <button onClick={() => handleSettingChange('metronomeBPM', Math.min(400, metronomeBPM + 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">+</button>
+                         <button onClick={() => handleSettingChange('metronomeBPM', Math.min(400, metronomeBPM + 1))} className={`p-2 rounded-full ${actionButtonBg} transition-colors`}>+</button>
                       </div>
                     </div>
                 )}
 
 
-                <hr className="border-slate-200/50 dark:border-slate-700/50" />
+                <hr className={borderColor} />
                 
                 <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
                     <label className="flex items-center space-x-3 cursor-pointer">
@@ -1641,21 +1698,21 @@ const App: React.FC = () => {
                             onChange={(e) => handleSettingChange('syncBreathWithMetronome', e.target.checked)}
                             className="h-5 w-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-blue-600"
                         />
-                        <span className="font-medium text-slate-800 dark:text-slate-100">
+                        <span className={`font-medium ${textColor}`}>
                             Sync with Breath Speed
                         </span>
                     </label>
 
                     {syncBreathWithMetronome && (
                     <div className="flex items-center gap-2">
-                        <label htmlFor="sync-multiplier" className="font-medium text-slate-800 dark:text-slate-100">
+                        <label htmlFor="sync-multiplier" className={`font-medium ${textColor}`}>
                             X
                         </label>
                         <select
                             id="sync-multiplier"
                             value={syncMultiplier}
                             onChange={(e) => handleSettingChange('syncMultiplier', Number(e.target.value))}
-                            className="w-20 px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                            className={`w-20 px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
                         >
                             {[...Array(8)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
                         </select>
@@ -1669,11 +1726,11 @@ const App: React.FC = () => {
       default: // 'main'
         return (
           <>
-            <div className="flex items-center pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
+            <div className={`flex items-center pb-4 mb-4 border-b ${borderColor}`}>
                 <div className="w-8"> {/* Spacer to align title */}</div>
-                <h2 className="text-xl font-bold text-center flex-grow text-slate-800 dark:text-slate-100">Settings</h2>
-                <button onClick={() => setIsPanelOpen(false)} className="p-2 -mr-2 rounded-full hover:bg-slate-500/10 transition-colors" aria-label="Close settings panel">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
+                <h2 className={`text-xl font-bold text-center flex-grow ${textColor}`}>Settings</h2>
+                <button onMouseDown={() => setIsPanelOpen(false)} className={`p-2 -mr-2 rounded-full ${hoverBg} transition-colors`} aria-label="Close settings panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${closeIconColor}`} viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                 </button>
@@ -1682,35 +1739,35 @@ const App: React.FC = () => {
                 <div>
                   <ul className="space-y-2">
                     <li>
-                      <button onClick={() => setPanelView('visuals')} className="w-full flex justify-between items-center text-left p-4 rounded-xl hover:bg-slate-500/10 transition-colors bg-slate-500/5">
-                          <span className="font-semibold text-lg text-slate-800 dark:text-slate-200">Visual Effects</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                      <button onClick={() => setPanelView('visuals')} className={`w-full flex justify-between items-center text-left p-4 rounded-xl ${hoverBg} ${subMenuBg} transition-colors`}>
+                          <span className={`font-semibold text-lg ${secondaryTextColor}`}>Visual Effects</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${mutedTextColor}`} viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                       </button>
                     </li>
                      <li>
-                      <button onClick={() => setPanelView('metronome')} className="w-full flex justify-between items-center text-left p-4 rounded-xl hover:bg-slate-500/10 transition-colors bg-slate-500/5">
-                          <span className="font-semibold text-lg text-slate-800 dark:text-slate-200">Metronome</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                      <button onClick={() => setPanelView('metronome')} className={`w-full flex justify-between items-center text-left p-4 rounded-xl ${hoverBg} ${subMenuBg} transition-colors`}>
+                          <span className={`font-semibold text-lg ${secondaryTextColor}`}>Metronome</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${mutedTextColor}`} viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                       </button>
                     </li>
                     <li>
-                      <button onClick={() => setPanelView('interface')} className="w-full flex justify-between items-center text-left p-4 rounded-xl hover:bg-slate-500/10 transition-colors bg-slate-500/5">
-                          <span className="font-semibold text-lg text-slate-800 dark:text-slate-200">Interface</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                      <button onClick={() => setPanelView('interface')} className={`w-full flex justify-between items-center text-left p-4 rounded-xl ${hoverBg} ${subMenuBg} transition-colors`}>
+                          <span className={`font-semibold text-lg ${secondaryTextColor}`}>Interface</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${mutedTextColor}`} viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                       </button>
                     </li>
                   </ul>
                 </div>
-                <hr className="border-slate-200/50 dark:border-slate-700/50"/>
+                <hr className={borderColor}/>
                <div>
                   <div className="space-y-2 mb-4">
-                    <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
+                    <label htmlFor="preset-select" className={`block text-sm font-medium ${secondaryTextColor}`}>
                       Load Preset
                     </label>
                     <div className="flex gap-2 items-center">
@@ -1718,7 +1775,7 @@ const App: React.FC = () => {
                         id="preset-select"
                         value={selectedPreset}
                         onChange={handlePresetSelect}
-                        className="flex-grow min-w-0 px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                        className={`flex-grow min-w-0 px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
                         aria-label="Load a preset"
                       >
                         <option value="">Select a preset...</option>
@@ -1743,14 +1800,14 @@ const App: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-2 pt-2">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Save Current Settings</p>
+                    <p className={`text-sm font-medium ${secondaryTextColor}`}>Save Current Settings</p>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
                         value={newPresetName} 
                         onChange={e => setNewPresetName(e.target.value)} 
                         placeholder="Preset name..." 
-                        className="flex-grow min-w-0 px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                        className={`flex-grow min-w-0 px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
                         aria-label="New preset name"
                       />
                       <button 
@@ -1771,7 +1828,7 @@ const App: React.FC = () => {
             <div className="pt-4 mt-auto">
                <button
                 onClick={handleExportHtml}
-                className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors"
+                className={`w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors ${finalButtonBg}`}
               >
                 Export as HTML
               </button>
@@ -1793,25 +1850,42 @@ const App: React.FC = () => {
       onTouchEnd={handleTouchEnd}
     >
       {!isPanelOpen && (
-        <button
-          onClick={() => {
-            setIsPanelOpen(true);
-            setPanelView('main'); // Reset to main view when opening
-          }}
-          className="fixed top-4 left-4 z-30 p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70"
-          aria-label="Open settings panel"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
-            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-          </svg>
-        </button>
+        <div className="fixed top-4 left-4 right-4 z-30 flex justify-between items-center">
+            <button
+              onClick={() => {
+                setIsPanelOpen(true);
+                setPanelView('main'); // Reset to main view when opening
+              }}
+              className="p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70"
+              aria-label="Open settings panel"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379-1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+              </svg>
+            </button>
+            <button
+                onClick={toggleFullscreen}
+                className="p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70"
+                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            >
+                {isFullscreen ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M15.707 15.707a1 1 0 01-1.414 0L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 011.414-1.414L10 8.586l4.293-4.293a1 1 0 011.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                    </svg>
+                ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.5 2.5a.5.5 0 00-.5.5v3a.5.5 0 001 0V3h3a.5.5 0 000-1H4.5zM15.5 2.5a.5.5 0 00-.5.5V6a.5.5 0 001 0V3h-3a.5.5 0 000 1h3.5zM4.5 17.5a.5.5 0 00.5-.5V14a.5.5 0 00-1 0v3H2a.5.5 0 000 1h2.5zM15.5 17.5a.5.5 0 00.5-.5V14a.5.5 0 00-1 0v3h-3a.5.5 0 000 1h3.5z" clipRule="evenodd" />
+                    </svg>
+                )}
+            </button>
+        </div>
       )}
 
       {/* Main Screen Metronome UI */}
        {showMetronomeControl && (
         <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-center sm:justify-start z-10">
           <button
-            onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
+            onClick={handleMetronomeToggle}
             className={`relative w-16 h-16 rounded-full transition-all duration-300 flex items-center justify-center shadow-lg text-slate-800 dark:text-slate-200
                         bg-white/40 dark:bg-black/40 hover:bg-white/60 dark:hover:bg-black/60 backdrop-blur-sm border border-white/20 dark:border-black/20`}
             aria-label={metronomeEnabled ? 'Stop Metronome' : 'Start Metronome'}
