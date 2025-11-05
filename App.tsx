@@ -167,6 +167,10 @@ interface Settings {
   targetBPM: number;
   increaseBy: number;
   everyNMeasures: number;
+  // Interface Settings
+  showMetronomeStart: boolean;
+  showCurrentBPM: boolean;
+  showSpeedTrainerProgress: boolean;
 }
 
 interface Preset {
@@ -208,6 +212,9 @@ const initialSettings: Settings = {
   targetBPM: 120,
   increaseBy: 5,
   everyNMeasures: 2,
+  showMetronomeStart: true,
+  showCurrentBPM: true,
+  showSpeedTrainerProgress: true,
 };
 
 const defaultPresets: Preset[] = [
@@ -473,7 +480,8 @@ const App: React.FC = () => {
     metronomeEnabled, metronomeBPM, metronomeSoundKit,
     beatsPerMeasure, accentPattern, panelOpacity, panelBlur,
     syncBreathWithMetronome, syncMultiplier,
-    speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures
+    speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures,
+    showMetronomeStart, showCurrentBPM, showSpeedTrainerProgress
   } = settings;
 
   useEffect(() => {
@@ -1290,6 +1298,33 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
+              <hr className="border-slate-200/50 dark:border-slate-700/50" />
+              <div>
+                <h3 className="text-md font-semibold text-slate-800 dark:text-slate-200 mb-3">Main Screen Elements</h3>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2 rounded-md">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Show Metronome Button</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={showMetronomeStart} onChange={(e) => handleSettingChange('showMetronomeStart', e.target.checked)} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded-md">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Show BPM Display</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={showCurrentBPM} onChange={(e) => handleSettingChange('showCurrentBPM', e.target.checked)} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded-md">
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Show Speed Trainer Progress</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input type="checkbox" checked={showSpeedTrainerProgress} onChange={(e) => handleSettingChange('showSpeedTrainerProgress', e.target.checked)} className="sr-only peer" />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
             </div>
           </>
         );
@@ -1767,6 +1802,9 @@ const App: React.FC = () => {
     }
   }
 
+  const progressPercent = targetBPM === startBPM ? 0 : Math.min(100,
+    (Math.abs(currentDynamicBPM - startBPM) / Math.abs(targetBPM - startBPM)) * 100
+  );
 
   return (
     <main 
@@ -1789,6 +1827,47 @@ const App: React.FC = () => {
           <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
         </button>
       )}
+
+      {/* Main Screen Metronome UI */}
+      <div className="fixed bottom-4 right-4 z-10 flex flex-col items-end gap-4">
+        {/* Metronome Info Display */}
+        {metronomeEnabled && (showCurrentBPM || (speedTrainerEnabled && showSpeedTrainerProgress)) && (
+            <div className="w-64 p-3 rounded-xl bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-200 shadow-lg">
+                {showCurrentBPM && (
+                    <div className="text-center">
+                        <span className="font-mono text-4xl font-bold tracking-tight">{currentDynamicBPM}</span>
+                        <span className="text-lg ml-1 font-medium">BPM</span>
+                    </div>
+                )}
+                
+                {speedTrainerEnabled && showSpeedTrainerProgress && (
+                    <div className={showCurrentBPM ? 'mt-2' : ''}>
+                        <div className="flex justify-between text-xs font-mono text-slate-600 dark:text-slate-400">
+                            <span>{startBPM}</span>
+                            <span>Target: {targetBPM}</span>
+                        </div>
+                        <div className="w-full bg-slate-300/50 dark:bg-slate-600/50 rounded-full h-2 mt-1">
+                            <div className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-linear" style={{ width: `${progressPercent}%` }}></div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        )}
+
+        {/* Start/Stop Button */}
+        {showMetronomeStart && (
+             <button
+              onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
+              className={`w-20 h-20 rounded-full text-white text-xl font-bold transition-all duration-150 flex items-center justify-center shadow-lg
+                          ${metronomeEnabled 
+                              ? 'bg-red-600 hover:bg-red-700' 
+                              : 'bg-green-600 hover:bg-green-700'}`}
+              aria-label={metronomeEnabled ? 'Stop Metronome' : 'Start Metronome'}
+            >
+              {metronomeEnabled ? 'Stop' : 'Start'}
+            </button>
+        )}
+      </div>
         
       {isPanelOpen && (
           <div 
