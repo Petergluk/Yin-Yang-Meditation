@@ -2,7 +2,8 @@
 export default {
   content: [
     "./index.html",
-    "./App.tsx", // More specific and reliable path
+    "./App.tsx",
+    "./src/components/**/*.{js,ts,jsx,tsx}", // Added path for new components
   ],
   darkMode: 'class',
   theme: {

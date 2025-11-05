@@ -1,197 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { YinYang } from './src/components/YinYang';
+import { NumberInput } from './src/components/NumberInput';
+import { FullscreenEnterIcon, FullscreenExitIcon } from './src/components/FullscreenIcons';
+import { SettingsIcon } from './src/components/SettingsIcon';
+import type { Settings, Preset, AccentType, MetronomeSoundKit } from './src/types';
+import { ACCENT_CONFIG } from './src/config';
 
-// --- SVG Icon Components ---
-const FullscreenEnterIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg width="24px" height="24px" viewBox="0 0 16 16" className={className} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path fillRule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
-    </svg>
-);
-
-const FullscreenExitIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg width="24px" height="24px" viewBox="0 0 1024 1024" className={className} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-      <path d="M391 240.9c-.8-6.6-8.9-9.4-13.6-4.7l-43.7 43.7L200 146.3a8.03 8.03 0 0 0-11.3 0l-42.4 42.3a8.03 8.03 0 0 0 0 11.3L280 333.6l-43.9 43.9a8.01 8.01 0 0 0 4.7 13.6L401 410c5.1.6 9.5-3.7 8.9-8.9L391 240.9zm10.1 373.2L240.8 633c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L146.3 824a8.03 8.03 0 0 0 0 11.3l42.4 42.3c3.1 3.1 8.2 3.1 11.3 0L333.7 744l43.7 43.7A8.01 8.01 0 0 0 391 783l18.9-160.1c.6-5.1-3.7-9.4-8.8-8.8zm221.8-204.2L783.2 391c6.6-.8 9.4-8.9 4.7-13.6L744 333.6 877.7 200c3.1-3.1 3.1-8.2 0-11.3l-42.4-42.3a8.03 8.03 0 0 0-11.3 0L690.3 279.9l-43.7-43.7a8.01 8.01 0 0 0-13.6 4.7L614.1 401c-.6 5.2 3.7 9.5 8.8 8.9zM744 690.4l43.9-43.9a8.01 8.01 0 0 0-4.7-13.6L623 614c-5.1-.6-9.5 3.7-8.9 8.9L633 783.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L824 877.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L744 690.4z"/>
-    </svg>
-);
-
-
-// --- Color Utility Functions ---
-const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result
-    ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
-    : null;
-};
-
-const rgbToHex = (r: number, g: number, b: number): string => {
-  return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
-};
-
-const lerp = (a: number, b: number, t: number): number => {
-    return a * (1 - t) + b * t;
-}
-
-const lerpColor = (colorA: string, colorB: string, amount: number): string => {
-  const rgbA = hexToRgb(colorA);
-  const rgbB = hexToRgb(colorB);
-  if (!rgbA || !rgbB) return colorA;
-
-  // Corrected color interpolation
-  const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
-  const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
-  const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
-
-  return rgbToHex(r, g, b);
-};
-
-
-/**
- * Props for the YinYang component.
- */
-interface YinYangProps {
-  size: number;
-  rotationSpeed: number;
-  pulseSpeed: number;
-  minRadius: number;
-  maxRadius: number;
-  curveRadius: number;
-  invertPulsePhase: boolean;
-  eyeAngleOffset: number;
-  borderWidth: number;
-  darkEyeColor: string;
-  lightEyeColor: string;
-}
-
-const YinYang: React.FC<YinYangProps> = ({
-  size,
-  rotationSpeed,
-  pulseSpeed,
-  minRadius,
-  maxRadius,
-  curveRadius,
-  invertPulsePhase,
-  eyeAngleOffset,
-  borderWidth,
-  darkEyeColor,
-  lightEyeColor,
-}) => {
-  const rotationStyle = {
-    animationDuration: `${rotationSpeed}s`,
-  };
-
-  // SVG calculations for robust border
-  const center = 50;
-  const mainRadius = 50 - (borderWidth / 2);
-
-  const pathD = `M${center},${center + mainRadius} A${curveRadius} ${curveRadius} 0 0 0 ${center} ${center} A${curveRadius} ${curveRadius} 0 0 1 ${center} ${center - mainRadius} A${mainRadius} ${mainRadius} 0 0 1 ${center} ${center + mainRadius} Z`;
-  
-  const eyeCenterYTop = -mainRadius / 2;
-  const eyeCenterYBottom = mainRadius / 2;
-  
-  const minScale = minRadius / maxRadius;
-
-  const basePulseStyle = {
-    animationDuration: `${pulseSpeed}s`,
-    '--min-scale': minScale,
-    '--max-scale': 1,
-  } as React.CSSProperties;
-
-  const invertedPulseStyle = invertPulsePhase ? {
-    ...basePulseStyle,
-    animationDelay: `-${pulseSpeed / 2}s`,
-  } : basePulseStyle;
-
-  return (
-    <div
-      className="animate-spin-continuous"
-      style={rotationStyle}
-    >
-      <div 
-        className="relative rounded-full overflow-hidden"
-        style={{ width: `${size}px`, height: `${size}px` }}
-      >
-          <svg viewBox="0 0 100 100" className="w-full h-full">
-              <circle
-                cx={center}
-                cy={center}
-                r={mainRadius}
-                fill="#000000"
-                stroke="#000000"
-                strokeWidth={borderWidth}
-              />
-              <path
-                  d={pathD}
-                  fill="#ffffff"
-              />
-              <g transform={`translate(${center} ${center}) rotate(${eyeAngleOffset})`}>
-                <circle cx={0} cy={eyeCenterYTop} r={maxRadius} className="animate-pulse-scale" style={{...basePulseStyle, fill: darkEyeColor, transformOrigin: `0px ${eyeCenterYTop}px`}} />
-                <circle cx={0} cy={eyeCenterYBottom} r={maxRadius} className="animate-pulse-scale" style={{...invertedPulseStyle, fill: lightEyeColor, transformOrigin: `0px ${eyeCenterYBottom}px`}} />
-              </g>
-          </svg>
-      </div>
-    </div>
-  );
-};
-
-// --- Settings and Presets Configuration ---
-type AccentType = 'skip' | 'standard' | 'accent1' | 'accent2';
-
-const ACCENT_CONFIG: Record<AccentType, { color: string; ringColor: string; label: string }> = {
-  skip: { color: 'bg-slate-500/30', ringColor: 'ring-slate-400', label: 'Skip' },
-  standard: { color: 'bg-green-500/80', ringColor: 'ring-green-400', label: 'Standard' },
-  accent1: { color: 'bg-red-500/80', ringColor: 'ring-red-400', label: 'Accent 1' },
-  accent2: { color: 'bg-yellow-500/80', ringColor: 'ring-yellow-400', label: 'Accent 2' },
-};
-
-type MetronomeSoundKit = 'click' | 'beep' | 'drum' | 'jazz' | 'percussion' | 'marimba' | 'rock_drums';
-
-
-interface Settings {
-  rotationSpeed: number;
-  pulseSpeed: number;
-  minRadius: number;
-  maxRadius: number;
-  breathSpeed: number;
-  minBreathPercent: number;
-  maxBreathPercent: number;
-  curveSpeed: number;
-  maxCurveRadius: number;
-  invertPulsePhase: boolean;
-  eyeAngleOffset: number;
-  borderWidth: number;
-  eyeColorInversion: number;
-  eyeColorSpeed: number;
-  bgLightness: number;
-  bgWarmth: number;
-  glowSize: number;
-  metronomeEnabled: boolean;
-  metronomeBPM: number;
-  metronomeSoundKit: MetronomeSoundKit;
-  beatsPerMeasure: number;
-  accentPattern: AccentType[];
-  panelOpacity: number;
-  panelBlur: number;
-  syncBreathWithMetronome: boolean;
-  syncMultiplier: number;
-  asymmetricBreathing: boolean;
-  // Speed Trainer Settings
-  speedTrainerEnabled: boolean;
-  startBPM: number;
-  targetBPM: number;
-  increaseBy: number;
-  everyNMeasures: number;
-  // Interface Settings
-  showMetronomeControl: boolean;
-}
-
-interface Preset {
-  name: string;
-  settings: Settings;
-}
-
+// --- Preset Configuration ---
 const PRESETS_STORAGE_KEY = 'yin-yang-custom-presets';
 
 const initialSettings: Settings = {
@@ -318,147 +133,6 @@ const defaultPresets: Preset[] = [
   },
 ];
 
-const NumberInput: React.FC<{
-    label: string;
-    value: number;
-    onChange: (value: number) => void;
-    min: number;
-    max: number;
-    step: number;
-    isDark: boolean;
-}> = ({ label, value, onChange, min, max, step, isDark }) => {
-    const [inputValue, setInputValue] = useState(String(value));
-    const intervalRef = useRef<number | null>(null);
-    const timeoutRef = useRef<number | null>(null);
-
-    // Syncs the input field when the prop value changes from the outside (e.g., loading a preset)
-    useEffect(() => {
-        if (document.activeElement?.id !== `input-${label}`) {
-            setInputValue(String(value));
-        }
-    }, [value, label]);
-
-    const stopCounter = () => {
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        timeoutRef.current = null;
-        intervalRef.current = null;
-    };
-
-    // Use a ref for the value in intervals to avoid stale closures
-    const valueRef = useRef(value);
-    useEffect(() => {
-        valueRef.current = value;
-    }, [value]);
-
-    const handleChange = (newValue: number) => {
-        const clampedValue = Math.max(min, Math.min(max, newValue));
-        // Only call onChange if the value is actually different to prevent unnecessary re-renders
-        if (clampedValue !== valueRef.current) {
-            onChange(clampedValue);
-        }
-        return clampedValue;
-    };
-    
-    const startCounter = (increment: boolean) => {
-        stopCounter();
-        // Perform initial change
-        const nextValue = valueRef.current + (increment ? step : -step);
-        handleChange(nextValue);
-        
-        // Start rapid change after a delay
-        timeoutRef.current = window.setTimeout(() => {
-            intervalRef.current = window.setInterval(() => {
-                // Read from ref to get the latest value inside interval
-                const currentVal = valueRef.current;
-                const nextVal = currentVal + (increment ? step : -step);
-                const clampedVal = handleChange(nextVal);
-                // Stop if we hit the boundary
-                if (clampedVal === min || clampedVal === max) {
-                    stopCounter();
-                }
-            }, 50);
-        }, 500);
-    };
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setInputValue(e.target.value);
-    };
-
-    const handleInputBlur = () => {
-        const parsedValue = parseInt(inputValue, 10);
-        if (!isNaN(parsedValue)) {
-            const clampedValue = Math.max(min, Math.min(max, parsedValue));
-            // Update parent state
-            onChange(clampedValue);
-            // Sync local input state in case of clamping
-            setInputValue(String(clampedValue));
-        } else {
-            // Revert to last valid value if input is not a number
-            setInputValue(String(value));
-        }
-    };
-
-    const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') {
-            handleInputBlur();
-            (e.target as HTMLInputElement).blur();
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            const nextValue = (parseInt(inputValue, 10) || value) + step;
-            const clampedValue = Math.max(min, Math.min(max, nextValue));
-            onChange(clampedValue);
-        } else if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            const nextValue = (parseInt(inputValue, 10) || value) - step;
-            const clampedValue = Math.max(min, Math.min(max, nextValue));
-            onChange(clampedValue);
-        }
-    };
-    
-    const textColor = isDark ? 'text-slate-200' : 'text-slate-700';
-    const bgColor = isDark ? 'bg-slate-700' : 'bg-slate-200';
-    const buttonBgColor = isDark ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-300 hover:bg-slate-400';
-    const inputTextColor = isDark ? 'text-slate-100' : 'text-slate-800';
-
-
-    return (
-        <div className="space-y-1">
-            <label htmlFor={`input-${label}`} className={`block text-sm font-medium ${textColor}`}>{label}</label>
-            <div className={`flex items-center justify-between p-1 ${bgColor} rounded-lg`}>
-                <button 
-                    onMouseDown={() => startCounter(false)} 
-                    onMouseUp={stopCounter} 
-                    onMouseLeave={stopCounter}
-                    onTouchStart={(e) => { e.preventDefault(); startCounter(false); }}
-                    onTouchEnd={stopCounter}
-                    className={`px-3 py-1 rounded-md ${buttonBgColor} transition-colors select-none touch-manipulation`}
-                    aria-label={`Decrease ${label}`}
-                >-</button>
-                <input
-                    id={`input-${label}`}
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={inputValue}
-                    onChange={handleInputChange}
-                    onBlur={handleInputBlur}
-                    onKeyDown={handleInputKeyDown}
-                    className={`w-16 text-center text-lg font-mono font-semibold ${inputTextColor} bg-transparent border-none focus:ring-0 p-0`}
-                />
-                <button 
-                    onMouseDown={() => startCounter(true)} 
-                    onMouseUp={stopCounter} 
-                    onMouseLeave={stopCounter}
-                    onTouchStart={(e) => { e.preventDefault(); startCounter(true); }}
-                    onTouchEnd={stopCounter}
-                    className={`px-3 py-1 rounded-md ${buttonBgColor} transition-colors select-none touch-manipulation`}
-                    aria-label={`Increase ${label}`}
-                >+</button>
-            </div>
-        </div>
-    );
-};
 
 const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(initialSettings);
@@ -476,6 +150,7 @@ const App: React.FC = () => {
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   const [currentDynamicBPM, setCurrentDynamicBPM] = useState(initialSettings.metronomeBPM);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metronomeTimeoutRef = useRef<number | null>(null);
@@ -483,6 +158,7 @@ const App: React.FC = () => {
   const beatCounterRef = useRef(0);
   const measureCounterRef = useRef(0);
   const currentBPMRef = useRef(initialSettings.startBPM);
+  const activityTimeoutRef = useRef<number | null>(null);
   
   // Refs for stateful, resettable animation
   const lastTimestampRef = useRef<number | null>(null);
@@ -490,7 +166,6 @@ const App: React.FC = () => {
   const curvePhaseRef = useRef(0);
   const colorPhaseRef = useRef(0);
   const animationKeyRef = useRef(0);
-
 
   const {
     rotationSpeed, pulseSpeed, minRadius, maxRadius,
@@ -504,6 +179,43 @@ const App: React.FC = () => {
     speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures,
     showMetronomeControl
   } = settings;
+
+  // --- UI Interactivity Effects ---
+  useEffect(() => {
+    const handleActivity = () => {
+      setIsHeaderVisible(true);
+      if (activityTimeoutRef.current) {
+        clearTimeout(activityTimeoutRef.current);
+      }
+      // Do not hide controls if the metronome is enabled
+      if (metronomeEnabled) {
+        return;
+      }
+      activityTimeoutRef.current = window.setTimeout(() => {
+        setIsHeaderVisible(false);
+      }, 5000);
+    };
+
+    if (metronomeEnabled) {
+      setIsHeaderVisible(true);
+      if (activityTimeoutRef.current) {
+        clearTimeout(activityTimeoutRef.current);
+      }
+    } else {
+       handleActivity(); // Initial call or reset after metronome stops
+    }
+
+    window.addEventListener('mousemove', handleActivity);
+    window.addEventListener('touchstart', handleActivity);
+    
+    return () => {
+      window.removeEventListener('mousemove', handleActivity);
+      window.removeEventListener('touchstart', handleActivity);
+      if (activityTimeoutRef.current) {
+        clearTimeout(activityTimeoutRef.current);
+      }
+    };
+  }, [metronomeEnabled]);
 
   useEffect(() => {
     try {
@@ -873,6 +585,37 @@ const App: React.FC = () => {
       light: '#ffffff',
     };
 
+    const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result
+          ? {
+              r: parseInt(result[1], 16),
+              g: parseInt(result[2], 16),
+              b: parseInt(result[3], 16),
+            }
+          : null;
+    };
+
+    const rgbToHex = (r: number, g: number, b: number): string => {
+        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).padStart(6, '0');
+    };
+
+    const lerp = (a: number, b: number, t: number): number => {
+        return a * (1 - t) + b * t;
+    }
+
+    const lerpColor = (colorA: string, colorB: string, amount: number): string => {
+        const rgbA = hexToRgb(colorA);
+        const rgbB = hexToRgb(colorB);
+        if (!rgbA || !rgbB) return colorA;
+
+        const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
+        const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
+        const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
+
+        return rgbToHex(r, g, b);
+    };
+
     const animate = (timestamp: number) => {
       if (lastTimestampRef.current === null) {
         lastTimestampRef.current = timestamp;
@@ -933,7 +676,6 @@ const App: React.FC = () => {
       const inversionAmount = eyeColorInversion / 100;
       const colorInversionFactor = easedColorValue * inversionAmount;
       
-      // Corrected color inversion logic for both eyes
       const darkEyeColor = lerpColor(COLORS.dark, COLORS.light, colorInversionFactor);
       const lightEyeColor = lerpColor(COLORS.light, COLORS.dark, colorInversionFactor);
 
@@ -956,17 +698,14 @@ const App: React.FC = () => {
     } else {
       document.documentElement.classList.remove('dark');
     }
-    // Force text color update for panel
     const panel = panelRef.current;
     if (panel) {
-        const textColor = isDark ? '#e2e8f0' : '#334155'; // slate-200 or slate-700
+        const textColor = isDark ? '#e2e8f0' : '#334155';
         panel.style.color = textColor;
     }
   }, [bgLightness]);
   
   const handleExportHtml = () => {
-    // This function exports a simplified version and does not include the new metronome features.
-    // It's kept for basic animation export functionality.
     const generatedHtml = `
 <!DOCTYPE html>
 <html lang="en">
@@ -1111,8 +850,6 @@ const App: React.FC = () => {
   };
   
   const handleSettingChange = (key: keyof Settings, value: any) => {
-    // When changing a setting that affects breath speed, disable asymmetric breathing
-    // unless the change is to asymmetricBreathing itself.
     if (key !== 'asymmetricBreathing' && (key === 'syncBreathWithMetronome' && value === false)) {
         setSettings(prev => ({ ...prev, [key]: value, asymmetricBreathing: false }));
     } else {
@@ -1341,13 +1078,13 @@ const App: React.FC = () => {
 
     const SubMenuHeader: React.FC<{ title: string }> = ({ title }) => (
       <div className={`pb-4 mb-4 border-b ${borderColor} flex items-center justify-between`}>
-          <button onMouseDown={() => setPanelView('main')} className={`flex items-center gap-2 w-full text-left text-xl font-bold ${textColor} p-2 -ml-2 rounded-lg ${hoverBg} transition-colors`} aria-label="Back to main menu">
+          <button onClick={() => setPanelView('main')} className={`flex items-center gap-2 w-full text-left text-xl font-bold ${textColor} p-2 -ml-2 rounded-lg ${hoverBg} transition-colors`} aria-label="Back to main menu">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
               <span>{title}</span>
           </button>
-          <button onMouseDown={() => setIsPanelOpen(false)} className={`p-2 -mr-2 rounded-full ${hoverBg} transition-colors`} aria-label="Close settings panel">
+          <button onClick={() => setIsPanelOpen(false)} className={`p-2 -mr-2 rounded-full ${hoverBg} transition-colors`} aria-label="Close settings panel">
               <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${closeIconColor}`} viewBox="0 0 20 20" fill="currentColor">
                   <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
               </svg>
@@ -1709,7 +1446,6 @@ const App: React.FC = () => {
                 <hr className={borderColor} />
                 
                 <div className={`p-4 rounded-xl space-y-3 ${syncBreathWithMetronome ? 'bg-slate-500/10' : ''} transition-colors`}>
-                    {/* Main Sync Row */}
                     <div className="flex items-center justify-between">
                         <label className="flex items-center space-x-3 cursor-pointer">
                             <input
@@ -1738,7 +1474,6 @@ const App: React.FC = () => {
                         </div>
                     </div>
                     
-                    {/* Asymmetric Row - with slide-down animation */}
                     <div className={`transition-all duration-300 ease-in-out overflow-hidden ${syncBreathWithMetronome ? 'max-h-12 pt-3' : 'max-h-0 pt-0'}`}>
                         <div className="flex items-center justify-between">
                             <label className={`font-medium ${textColor}`}>Asymmetric Rhythm (2:1)</label>
@@ -1757,9 +1492,9 @@ const App: React.FC = () => {
         return (
           <>
             <div className={`flex items-center pb-4 mb-4 border-b ${borderColor}`}>
-                <div className="w-8"> {/* Spacer to align title */}</div>
+                <div className="w-8"></div>
                 <h2 className={`text-xl font-bold text-center flex-grow ${textColor}`}>Settings</h2>
-                <button onMouseDown={() => setIsPanelOpen(false)} className={`p-2 -mr-2 rounded-full ${hoverBg} transition-colors`} aria-label="Close settings panel">
+                <button onClick={() => setIsPanelOpen(false)} className={`p-2 -mr-2 rounded-full ${hoverBg} transition-colors`} aria-label="Close settings panel">
                     <svg xmlns="http://www.w3.org/2000/svg" className={`h-6 w-6 ${closeIconColor}`} viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
@@ -1879,36 +1614,33 @@ const App: React.FC = () => {
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
-      {!isPanelOpen && (
-        <div className="fixed top-4 left-4 right-4 z-30 flex justify-between items-center">
-            <button
-              onClick={() => {
-                setIsPanelOpen(true);
-                setPanelView('main'); // Reset to main view when opening
-              }}
-              className="p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70"
-              aria-label="Open settings panel"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379-1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
-              </svg>
-            </button>
-            <button
-                onClick={toggleFullscreen}
-                className="p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70 text-slate-800 dark:text-slate-200"
-                aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-            >
-              {isFullscreen 
-                ? <FullscreenExitIcon className="w-6 h-6" />
-                : <FullscreenEnterIcon className="w-6 h-6" />
-              }
-            </button>
-        </div>
-      )}
+      <div className={`fixed top-4 left-4 right-4 z-30 justify-between items-center transition-opacity duration-700 ${isPanelOpen ? 'hidden' : 'flex'} ${isHeaderVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          <button
+            onClick={() => {
+              setIsPanelOpen(true);
+              setPanelView('main'); // Reset to main view when opening
+            }}
+            className="p-3 bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/60 dark:hover:bg-slate-800/60"
+            aria-label="Open settings panel"
+          >
+            <SettingsIcon className="h-6 w-6 text-slate-800/80 dark:text-slate-200/80" />
+          </button>
+          <button
+              onClick={toggleFullscreen}
+              className="p-3 bg-white/40 dark:bg-slate-800/40 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/60 dark:hover:bg-slate-800/60 text-slate-800/80 dark:text-slate-200/80"
+              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+          >
+            {isFullscreen 
+              ? <FullscreenExitIcon className="w-6 h-6" />
+              : <FullscreenEnterIcon className="w-6 h-6" />
+            }
+          </button>
+      </div>
+
 
       {/* Main Screen Metronome UI */}
        {showMetronomeControl && (
-        <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-center sm:justify-start z-10">
+        <div className={`fixed bottom-0 left-0 right-0 p-4 flex justify-center sm:justify-start z-10 transition-opacity duration-700 ${isHeaderVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           <button
             onClick={handleMetronomeToggle}
             className={`relative w-16 h-16 rounded-full transition-all duration-300 flex items-center justify-center shadow-lg text-slate-800 dark:text-slate-200
@@ -1924,7 +1656,6 @@ const App: React.FC = () => {
             )}
           </button>
           
-          {/* Speed Trainer Progress Bar */}
           <div className={`fixed bottom-0 left-0 right-0 h-1 transition-opacity duration-300 ${metronomeEnabled && speedTrainerEnabled ? 'opacity-100' : 'opacity-0'}`}>
             <div className="bg-slate-300/50 dark:bg-slate-600/50 h-full">
                 <div className="bg-blue-600 h-full transition-all duration-500 ease-linear" style={{ width: `${progressPercent}%` }}></div>
@@ -1941,7 +1672,6 @@ const App: React.FC = () => {
           ></div>
       )}
 
-      {/* Settings Panel */}
       <div 
         ref={panelRef}
         className={`fixed z-20 transition-transform duration-500 ease-in-out 
