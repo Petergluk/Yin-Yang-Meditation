@@ -124,13 +124,12 @@ const YinYang: React.FC<YinYangProps> = ({
 // --- Settings and Presets Configuration ---
 type AccentType = 'skip' | 'standard' | 'accent1' | 'accent2';
 
-const ACCENT_CONFIG: Record<AccentType, { color: string, borderColor: string, label: string }> = {
-  skip: { color: 'bg-slate-200 dark:bg-slate-700', borderColor: 'border-slate-400 dark:border-slate-500', label: 'Skip' },
-  standard: { color: 'bg-green-500/80', borderColor: 'border-green-400', label: 'Standard' },
-  accent1: { color: 'bg-red-500/80', borderColor: 'border-red-400', label: 'Accent 1' },
-  accent2: { color: 'bg-yellow-500/80', borderColor: 'border-yellow-400', label: 'Accent 2' },
+const ACCENT_CONFIG: Record<AccentType, { color: string; ringColor: string; label: string }> = {
+  skip: { color: 'bg-slate-500/30', ringColor: 'ring-slate-400', label: 'Skip' },
+  standard: { color: 'bg-green-500/80', ringColor: 'ring-green-400', label: 'Standard' },
+  accent1: { color: 'bg-red-500/80', ringColor: 'ring-red-400', label: 'Accent 1' },
+  accent2: { color: 'bg-yellow-500/80', ringColor: 'ring-yellow-400', label: 'Accent 2' },
 };
-
 
 interface Settings {
   rotationSpeed: number;
@@ -292,7 +291,7 @@ const App: React.FC = () => {
   const [selectedPreset, setSelectedPreset] = useState('');
   const [currentBeat, setCurrentBeat] = useState<number | null>(null);
   const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome'>('main');
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchStartY, setTouchStartY] = useState<number | null>(null);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const metronomeIntervalRef = useRef<number | null>(null);
@@ -833,17 +832,19 @@ const App: React.FC = () => {
   };
   
   const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.targetTouches[0].clientX);
+      if (panelRef.current && panelRef.current.contains(e.target as Node)) {
+          setTouchStartY(e.targetTouches[0].clientY);
+      }
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
-      if (touchStartX === null) return;
-      const touchEndX = e.changedTouches[0].clientX;
-      const deltaX = touchEndX - touchStartX;
-      if (deltaX < -50) { // Swiped left
+      if (touchStartY === null) return;
+      const touchEndY = e.changedTouches[0].clientY;
+      const deltaY = touchEndY - touchStartY;
+      if (deltaY > 50) { // Swiped down
           setIsPanelOpen(false);
       }
-      setTouchStartX(null);
+      setTouchStartY(null);
   };
   
   const cycleAccent = (currentAccent: AccentType): AccentType => {
@@ -902,15 +903,15 @@ const App: React.FC = () => {
       case 'visuals':
         return (
           <>
-            <div className="pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label="Back to main menu">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     <span>Visual Settings</span>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pr-1 -mr-2">
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4">
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
                   Rotation Speed ({rotationSpeed}s)
@@ -921,7 +922,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-              <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+              <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
                 <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Main Symbol</p>
                 <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -993,7 +994,7 @@ const App: React.FC = () => {
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                 />
               </div>
-                <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+                <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
                 <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Eyes Pulse</p>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1068,7 +1069,7 @@ const App: React.FC = () => {
                   </span>
                 </label>
               </div>
-              <hr className="border-slate-200 dark:border-slate-700 mb-4" />
+              <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
                 <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Background</p>
                 <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1104,17 +1105,17 @@ const App: React.FC = () => {
       case 'metronome':
         return (
           <>
-            <div className="pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-lg font-semibold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label="Back to main menu">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+            <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     <span>Metronome</span>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pr-1 -mr-2 space-y-6">
-                <label htmlFor="metronome-toggle" className="flex items-center justify-between cursor-pointer">
-                  <span className="text-md font-medium text-slate-800 dark:text-slate-200">
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6">
+                <label htmlFor="metronome-toggle" className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-slate-500/10">
+                  <span className="text-lg font-medium text-slate-800 dark:text-slate-200">
                     Enable Metronome
                   </span>
                   <div className="relative">
@@ -1125,26 +1126,27 @@ const App: React.FC = () => {
                       checked={metronomeEnabled}
                       onChange={(e) => handleSettingChange('metronomeEnabled', e.target.checked)}
                     />
-                    <div className="block bg-slate-300 dark:bg-slate-600 w-12 h-7 rounded-full"></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-5 h-5 rounded-full transition-transform ${metronomeEnabled ? 'translate-x-5 bg-blue-500' : ''}`}></div>
+                    <div className="block bg-slate-300 dark:bg-slate-600 w-14 h-8 rounded-full"></div>
+                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${metronomeEnabled ? 'translate-x-6 bg-blue-500' : ''}`}></div>
                   </div>
                 </label>
               
-              <div className={`p-4 rounded-lg bg-slate-100 dark:bg-slate-900/50 transition-opacity ${metronomeEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-                <div className="space-y-4">
+              <div className={`space-y-6 transition-opacity ${metronomeEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Accent Pattern</label>
-                      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Accent Pattern</label>
+                      <div className="grid grid-cols-4 gap-3">
                         {accentPattern.map((accent, index) => (
                           <button
                             key={index}
                             onClick={() => handleAccentChange(index)}
-                            className={`w-full aspect-square rounded-md text-white text-xs font-bold transition-all duration-100 border-2 ${ACCENT_CONFIG[accent].color} ${currentBeat === index ? 'ring-2 ring-offset-2 ring-offset-slate-100 dark:ring-offset-slate-800 ring-blue-500 ' + ACCENT_CONFIG[accent].borderColor : 'border-transparent'}`}
+                            className={`relative w-full aspect-square rounded-xl text-white text-xl font-bold transition-all duration-150 flex items-center justify-center
+                                        ${ACCENT_CONFIG[accent].color} 
+                                        ${currentBeat === index ? `ring-4 ${ACCENT_CONFIG[accent].ringColor}` : 'ring-0'}`}
                             title={ACCENT_CONFIG[accent].label}
                             aria-label={`Beat ${index + 1}: ${ACCENT_CONFIG[accent].label}. Click to change.`}
                             disabled={!metronomeEnabled}
                           >
-                          {index + 1}
+                          <span className="drop-shadow-sm">{index + 1}</span>
                           </button>
                         ))}
                       </div>
@@ -1159,7 +1161,7 @@ const App: React.FC = () => {
                                 id="beats-per-measure"
                                 value={beatsPerMeasure}
                                 onChange={(e) => handleBeatsPerMeasureChange(Number(e.target.value))}
-                                className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                                className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
                                 disabled={!metronomeEnabled}
                             >
                                 {[...Array(15)].map((_, i) => <option key={i+2} value={i+2}>{i+2}</option>)}
@@ -1173,7 +1175,7 @@ const App: React.FC = () => {
                                 id="metronome-sound"
                                 value={metronomeSoundKit}
                                 onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as 'click' | 'beep' | 'drum' | 'jazz' | 'drops')}
-                                className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                                className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
                                 disabled={!metronomeEnabled}
                             >
                                 <option value="click">Click</option>
@@ -1186,17 +1188,23 @@ const App: React.FC = () => {
                     </div>
                   
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        BPM ({metronomeBPM})
-                      </label>
-                      <input
-                        type="range" min="20" max="400" value={metronomeBPM}
-                        onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
-                        className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                        disabled={!metronomeEnabled}
-                      />
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                          BPM
+                        </label>
+                        <span className="text-lg font-mono font-semibold text-slate-800 dark:text-slate-200">{metronomeBPM}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                         <button onClick={() => handleSettingChange('metronomeBPM', Math.max(20, metronomeBPM - 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors" disabled={!metronomeEnabled}>-</button>
+                         <input
+                          type="range" min="20" max="400" value={metronomeBPM}
+                          onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
+                          className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                          disabled={!metronomeEnabled}
+                        />
+                         <button onClick={() => handleSettingChange('metronomeBPM', Math.min(400, metronomeBPM + 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors" disabled={!metronomeEnabled}>+</button>
+                      </div>
                   </div>
-                </div>
               </div>
             </div>
           </>
@@ -1204,37 +1212,37 @@ const App: React.FC = () => {
       default: // 'main'
         return (
           <>
-            <div className="flex items-center pb-4 mb-4 border-b border-slate-200 dark:border-slate-700">
+            <div className="flex items-center pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
                 <div className="w-8"> {/* Spacer to align title */}</div>
-                <h2 className="text-lg font-semibold text-center flex-grow text-slate-800 dark:text-slate-200">Settings</h2>
-                <button onClick={() => setIsPanelOpen(false)} className="p-2 -mr-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors" aria-label="Close settings panel">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <h2 className="text-xl font-bold text-center flex-grow text-slate-800 dark:text-slate-200">Settings</h2>
+                <button onClick={() => setIsPanelOpen(false)} className="p-2 -mr-2 rounded-full hover:bg-slate-500/10 transition-colors" aria-label="Close settings panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pt-4 pr-1 -mr-2 space-y-4">
+            <div className="flex-grow overflow-y-auto pt-4 pr-2 -mr-4 space-y-4">
                 <div>
                   <ul className="space-y-2">
                     <li>
-                      <button onClick={() => setPanelView('visuals')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">Visual Settings</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                      <button onClick={() => setPanelView('visuals')} className="w-full flex justify-between items-center text-left p-4 rounded-xl hover:bg-slate-500/10 transition-colors bg-slate-500/5">
+                          <span className="font-semibold text-lg text-slate-800 dark:text-slate-200">Visual Effects</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                       </button>
                     </li>
                      <li>
-                      <button onClick={() => setPanelView('metronome')} className="w-full flex justify-between items-center text-left p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">Metronome</span>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                      <button onClick={() => setPanelView('metronome')} className="w-full flex justify-between items-center text-left p-4 rounded-xl hover:bg-slate-500/10 transition-colors bg-slate-500/5">
+                          <span className="font-semibold text-lg text-slate-800 dark:text-slate-200">Metronome</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
                             <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
                           </svg>
                       </button>
                     </li>
                   </ul>
                 </div>
-                <hr className="border-slate-200 dark:border-slate-700"/>
+                <hr className="border-slate-200/50 dark:border-slate-700/50"/>
                <div>
                   <div className="space-y-2 mb-4">
                     <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1245,7 +1253,7 @@ const App: React.FC = () => {
                         id="preset-select"
                         value={selectedPreset}
                         onChange={handlePresetSelect}
-                        className="flex-grow min-w-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        className="flex-grow min-w-0 px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
                         aria-label="Load a preset"
                       >
                         <option value="">Select a preset...</option>
@@ -1277,7 +1285,7 @@ const App: React.FC = () => {
                         value={newPresetName} 
                         onChange={e => setNewPresetName(e.target.value)} 
                         placeholder="Preset name..." 
-                        className="flex-grow min-w-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                        className="flex-grow min-w-0 px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
                         aria-label="New preset name"
                       />
                       <button 
@@ -1298,7 +1306,7 @@ const App: React.FC = () => {
             <div className="pt-4 mt-auto">
                <button
                 onClick={handleExportHtml}
-                className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors"
+                className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors text-lg"
               >
                 Export as HTML
               </button>
@@ -1313,6 +1321,8 @@ const App: React.FC = () => {
     <main 
       className={`relative flex items-center justify-center min-h-screen transition-colors duration-500 overflow-hidden`}
       style={{ backgroundColor: bgColor }}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {!isPanelOpen && (
         <button
@@ -1320,7 +1330,7 @@ const App: React.FC = () => {
             setIsPanelOpen(true);
             setPanelView('main'); // Reset to main view when opening
           }}
-          className="absolute top-4 left-4 z-30 p-2 space-y-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md border border-slate-200 dark:border-slate-700 transition-opacity hover:opacity-80"
+          className="fixed top-4 left-4 z-30 p-2 space-y-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md border border-slate-200/50 dark:border-slate-700/50 transition-opacity hover:opacity-80"
           aria-label="Toggle settings panel"
         >
           <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
@@ -1329,26 +1339,29 @@ const App: React.FC = () => {
         </button>
       )}
         
-        {isPanelOpen && (
-            <div 
-                className="fixed inset-0 bg-black/30 z-10 transition-opacity duration-500" 
-                onClick={() => setIsPanelOpen(false)}
-                aria-hidden="true"
-            ></div>
-        )}
+      {isPanelOpen && (
+          <div 
+              className="fixed inset-0 bg-black/30 z-10 transition-opacity duration-500" 
+              onClick={() => setIsPanelOpen(false)}
+              aria-hidden="true"
+          ></div>
+      )}
 
-        <div 
-          ref={panelRef}
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-          className={`fixed top-0 left-0 h-full z-20 transition-transform duration-500 ease-in-out ${isPanelOpen ? 'translate-x-0' : '-translate-x-full'}`}
-        >
-          <div className="w-64 sm:w-80 overflow-y-auto p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-r border-slate-200 dark:border-slate-700 h-full flex flex-col">
-            {renderPanelContent()}
-          </div>
+      {/* Settings Panel */}
+      <div 
+        ref={panelRef}
+        className={`fixed z-20 transition-transform duration-500 ease-in-out 
+                   sm:top-0 sm:left-0 sm:h-full sm:translate-y-0 ${isPanelOpen ? 'sm:translate-x-0' : 'sm:-translate-x-full'}
+                   bottom-0 left-0 w-full h-[90vh] sm:h-full sm:w-80 md:w-96 rounded-t-3xl sm:rounded-none
+                   ${isPanelOpen ? 'translate-y-0' : 'translate-y-full'}`}
+      >
+        <div className="w-full h-full p-4 sm:p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-2xl border-t sm:border-t-0 sm:border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col">
+          <div className="w-12 h-1.5 bg-slate-400 rounded-full mx-auto mb-3 sm:hidden"></div>
+          {renderPanelContent()}
         </div>
+      </div>
         
-        <div className={`transition-transform duration-500 ease-in-out flex items-center justify-center w-full ${isPanelOpen ? 'lg:translate-x-32' : 'translate-x-0'}`}>
+      <div className={`transition-transform duration-500 ease-in-out flex items-center justify-center w-full h-full`}>
             <div 
               className="relative flex items-center justify-center"
               style={{ width: `${baseSize}px`, height: `${baseSize}px`}}
