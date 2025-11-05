@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- Color Utility Functions ---
 const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
@@ -25,7 +25,7 @@ const lerpColor = (colorA: string, colorB: string, amount: number): string => {
   const rgbB = hexToRgb(colorB);
   if (!rgbA || !rgbB) return colorA;
 
-  const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
+  const r = Math.round(lerp(rgbA.r, rgbA.r, amount));
   const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
   const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
 
@@ -131,6 +131,9 @@ const ACCENT_CONFIG: Record<AccentType, { color: string; ringColor: string; labe
   accent2: { color: 'bg-yellow-500/80', ringColor: 'ring-yellow-400', label: 'Accent 2' },
 };
 
+type MetronomeSoundKit = 'click' | 'beep' | 'drum' | 'jazz' | 'drops' | 'marimba' | 'jazz_ride';
+
+
 interface Settings {
   rotationSpeed: number;
   pulseSpeed: number;
@@ -151,11 +154,19 @@ interface Settings {
   glowSize: number;
   metronomeEnabled: boolean;
   metronomeBPM: number;
-  metronomeSoundKit: 'click' | 'beep' | 'drum' | 'jazz' | 'drops';
+  metronomeSoundKit: MetronomeSoundKit;
   beatsPerMeasure: number;
   accentPattern: AccentType[];
   panelOpacity: number;
   panelBlur: number;
+  syncBreathWithMetronome: boolean;
+  syncMultiplier: number;
+  // Speed Trainer Settings
+  speedTrainerEnabled: boolean;
+  startBPM: number;
+  targetBPM: number;
+  increaseBy: number;
+  everyNMeasures: number;
 }
 
 interface Preset {
@@ -185,11 +196,18 @@ const initialSettings: Settings = {
   glowSize: 25,
   metronomeEnabled: false,
   metronomeBPM: 60,
-  metronomeSoundKit: 'click',
+  metronomeSoundKit: 'jazz',
   beatsPerMeasure: 4,
   accentPattern: ['accent1', 'standard', 'standard', 'standard'],
-  panelOpacity: 60,
-  panelBlur: 16,
+  panelOpacity: 40,
+  panelBlur: 10,
+  syncBreathWithMetronome: false,
+  syncMultiplier: 2,
+  speedTrainerEnabled: false,
+  startBPM: 60,
+  targetBPM: 120,
+  increaseBy: 5,
+  everyNMeasures: 2,
 };
 
 const defaultPresets: Preset[] = [
@@ -278,15 +296,146 @@ const defaultPresets: Preset[] = [
       metronomeSoundKit: 'click',
     },
   },
-// Fix: Removed redundant .map() call that was causing a TypeScript type inference error.
-// The presets are already complete objects due to `...initialSettings` being spread inside each definition.
 ];
 
+const NumberInput: React.FC<{
+    label: string;
+    value: number;
+    onChange: (value: number) => void;
+    min: number;
+    max: number;
+    step: number;
+}> = ({ label, value, onChange, min, max, step }) => {
+    const [inputValue, setInputValue] = useState(String(value));
+    const intervalRef = useRef<number | null>(null);
+    const timeoutRef = useRef<number | null>(null);
+
+    // Syncs the input field when the prop value changes from the outside (e.g., loading a preset)
+    useEffect(() => {
+        if (document.activeElement?.id !== `input-${label}`) {
+            setInputValue(String(value));
+        }
+    }, [value, label]);
+
+    const stopCounter = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        timeoutRef.current = null;
+        intervalRef.current = null;
+    };
+
+    // Use a ref for the value in intervals to avoid stale closures
+    const valueRef = useRef(value);
+    useEffect(() => {
+        valueRef.current = value;
+    }, [value]);
+
+    const handleChange = (newValue: number) => {
+        const clampedValue = Math.max(min, Math.min(max, newValue));
+        // Only call onChange if the value is actually different to prevent unnecessary re-renders
+        if (clampedValue !== valueRef.current) {
+            onChange(clampedValue);
+        }
+        return clampedValue;
+    };
+    
+    const startCounter = (increment: boolean) => {
+        stopCounter();
+        // Perform initial change
+        const nextValue = valueRef.current + (increment ? step : -step);
+        handleChange(nextValue);
+        
+        // Start rapid change after a delay
+        timeoutRef.current = window.setTimeout(() => {
+            intervalRef.current = window.setInterval(() => {
+                // Read from ref to get the latest value inside interval
+                const currentVal = valueRef.current;
+                const nextVal = currentVal + (increment ? step : -step);
+                const clampedVal = handleChange(nextVal);
+                // Stop if we hit the boundary
+                if (clampedVal === min || clampedVal === max) {
+                    stopCounter();
+                }
+            }, 50);
+        }, 500);
+    };
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+    };
+
+    const handleInputBlur = () => {
+        const parsedValue = parseInt(inputValue, 10);
+        if (!isNaN(parsedValue)) {
+            const clampedValue = Math.max(min, Math.min(max, parsedValue));
+            // Update parent state
+            onChange(clampedValue);
+            // Sync local input state in case of clamping
+            setInputValue(String(clampedValue));
+        } else {
+            // Revert to last valid value if input is not a number
+            setInputValue(String(value));
+        }
+    };
+
+    const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            handleInputBlur();
+            (e.target as HTMLInputElement).blur();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            const nextValue = (parseInt(inputValue, 10) || value) + step;
+            const clampedValue = Math.max(min, Math.min(max, nextValue));
+            onChange(clampedValue);
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            const nextValue = (parseInt(inputValue, 10) || value) - step;
+            const clampedValue = Math.max(min, Math.min(max, nextValue));
+            onChange(clampedValue);
+        }
+    };
+
+    return (
+        <div className="space-y-1">
+            <label htmlFor={`input-${label}`} className="block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+            <div className="flex items-center justify-between p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
+                <button 
+                    onMouseDown={() => startCounter(false)} 
+                    onMouseUp={stopCounter} 
+                    onMouseLeave={stopCounter}
+                    onTouchStart={(e) => { e.preventDefault(); startCounter(false); }}
+                    onTouchEnd={stopCounter}
+                    className="px-3 py-1 rounded-md bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 transition-colors select-none touch-manipulation"
+                    aria-label={`Decrease ${label}`}
+                >-</button>
+                <input
+                    id={`input-${label}`}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onBlur={handleInputBlur}
+                    onKeyDown={handleInputKeyDown}
+                    className="w-16 text-center text-lg font-mono font-semibold text-slate-800 dark:text-slate-200 bg-transparent border-none focus:ring-0 p-0"
+                />
+                <button 
+                    onMouseDown={() => startCounter(true)} 
+                    onMouseUp={stopCounter} 
+                    onMouseLeave={stopCounter}
+                    onTouchStart={(e) => { e.preventDefault(); startCounter(true); }}
+                    onTouchEnd={stopCounter}
+                    className="px-3 py-1 rounded-md bg-slate-300 dark:bg-slate-600 hover:bg-slate-400 dark:hover:bg-slate-500 transition-colors select-none touch-manipulation"
+                    aria-label={`Increase ${label}`}
+                >+</button>
+            </div>
+        </div>
+    );
+};
 
 const App: React.FC = () => {
   const [settings, setSettings] = useState<Settings>(initialSettings);
   const [animatedCurveRadius, setAnimatedCurveRadius] = useState(25);
-  const [animationKey, setAnimationKey] = useState(0);
   const [isPanelOpen, setIsPanelOpen] = useState(false);
   const [animatedDarkEyeColor, setAnimatedDarkEyeColor] = useState('#000000');
   const [animatedLightEyeColor, setAnimatedLightEyeColor] = useState('#ffffff');
@@ -298,10 +447,22 @@ const App: React.FC = () => {
   const [currentBeat, setCurrentBeat] = useState<number | null>(null);
   const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome' | 'interface'>('main');
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
+  const [currentDynamicBPM, setCurrentDynamicBPM] = useState(initialSettings.metronomeBPM);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const metronomeIntervalRef = useRef<number | null>(null);
+  const metronomeTimeoutRef = useRef<number | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const beatCounterRef = useRef(0);
+  const measureCounterRef = useRef(0);
+  const currentBPMRef = useRef(initialSettings.startBPM);
+  
+  // Refs for stateful, resettable animation
+  const lastTimestampRef = useRef<number | null>(null);
+  const breathPhaseRef = useRef(0);
+  const curvePhaseRef = useRef(0);
+  const colorPhaseRef = useRef(0);
+  const animationKeyRef = useRef(0);
+
 
   const {
     rotationSpeed, pulseSpeed, minRadius, maxRadius,
@@ -310,7 +471,9 @@ const App: React.FC = () => {
     eyeAngleOffset, borderWidth, eyeColorInversion,
     eyeColorSpeed, bgLightness, bgWarmth, glowSize,
     metronomeEnabled, metronomeBPM, metronomeSoundKit,
-    beatsPerMeasure, accentPattern, panelOpacity, panelBlur
+    beatsPerMeasure, accentPattern, panelOpacity, panelBlur,
+    syncBreathWithMetronome, syncMultiplier,
+    speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures
   } = settings;
 
   useEffect(() => {
@@ -319,202 +482,351 @@ const App: React.FC = () => {
       if (storedPresets) {
         setCustomPresets(JSON.parse(storedPresets));
       }
-    } catch (error) {
+    } catch (error)
+    {
       console.error("Failed to load custom presets:", error);
     }
   }, []);
   
-  // Metronome effect
-  useEffect(() => {
-    if (metronomeIntervalRef.current) {
-      clearInterval(metronomeIntervalRef.current);
-    }
-    setCurrentBeat(null);
-  
-    if (metronomeEnabled) {
-      const audioCtx = audioCtxRef.current;
-      if (!audioCtx || audioCtx.state !== 'running') return;
-  
-      const playSound = (beatIndex: number) => {
-        const accent = accentPattern[beatIndex];
-        if (accent === 'skip') return;
-        const time = audioCtx.currentTime;
+  // Metronome effect using recursive setTimeout for dynamic interval
+  const playSound = useCallback((beatIndex: number) => {
+    const audioCtx = audioCtxRef.current;
+    if (!audioCtx) return;
 
-        switch (metronomeSoundKit) {
-            case 'beep': {
-                const freq = accent === 'accent1' ? 880 : accent === 'accent2' ? 660 : 440;
-                const oscillator = audioCtx.createOscillator();
+    const accent = accentPattern[beatIndex];
+    if (accent === 'skip') return;
+    const time = audioCtx.currentTime;
+
+    switch (metronomeSoundKit) {
+        case 'marimba': {
+            const baseFreq = 261.63; // C4
+            const scale = [0, 4, 7]; // Major triad intervals (in semitones)
+            const semitone = Math.pow(2, 1 / 12);
+            const noteIndex = beatIndex % 3;
+            const freq = baseFreq * Math.pow(semitone, scale[noteIndex]);
+
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, time);
+
+            const osc2 = audioCtx.createOscillator();
+            osc2.connect(gainNode);
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(freq * 2.01, time); 
+
+            gainNode.gain.setValueAtTime(0, time);
+            gainNode.gain.linearRampToValueAtTime(0.4, time + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.8);
+
+            osc.start(time);
+            osc2.start(time);
+            osc.stop(time + 1);
+            osc2.stop(time + 1);
+            break;
+        }
+        case 'jazz_ride': {
+             const playRide = () => {
+                const bufferSize = audioCtx.sampleRate * 0.5;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+
+                const freqs = [220, 550, 880, 1320, 1600, 2400, 3200, 4800, 6000];
+                const decays = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45];
+                const amps = [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05];
+
+                for (let i = 0; i < bufferSize; i++) {
+                    let value = 0;
+                    const t = i / audioCtx.sampleRate;
+                    for (let j = 0; j < freqs.length; j++) {
+                        value += amps[j] * Math.sin(2 * Math.PI * freqs[j] * t) * Math.exp(-t / decays[j]);
+                    }
+                    output[i] = value * 0.5;
+                }
+                 for (let i = 0; i < bufferSize; i++) {
+                    output[i] += (Math.random() * 2 - 1) * 0.01;
+                }
+
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                const highpass = audioCtx.createBiquadFilter();
+                highpass.type = 'highpass';
+                highpass.frequency.value = 400;
+
                 const gainNode = audioCtx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(freq, time);
+                source.connect(highpass).connect(gainNode).connect(audioCtx.destination);
                 gainNode.gain.setValueAtTime(0.3, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
-                oscillator.start(time);
-                oscillator.stop(time + 0.1);
-                break;
-            }
-            case 'drum': {
-                if (accent === 'standard') { // Hi-hat
-                    const bufferSize = audioCtx.sampleRate * 0.1;
-                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                    const output = buffer.getChannelData(0);
-                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-                    
-                    const source = audioCtx.createBufferSource();
-                    source.buffer = buffer;
-                    const filter = audioCtx.createBiquadFilter();
-                    filter.type = 'highpass';
-                    filter.frequency.value = 7000;
-                    const gainNode = audioCtx.createGain();
-                    
-                    source.connect(filter).connect(gainNode).connect(audioCtx.destination);
-                    gainNode.gain.setValueAtTime(0.2, time);
-                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
-                    source.start(time);
-                } else if (accent === 'accent2') { // Snare
-                    const bufferSize = audioCtx.sampleRate * 0.2;
-                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                    const output = buffer.getChannelData(0);
-                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-                    
-                    const source = audioCtx.createBufferSource();
-                    source.buffer = buffer;
-                    const gainNode = audioCtx.createGain();
-                    source.connect(gainNode).connect(audioCtx.destination);
-                    gainNode.gain.setValueAtTime(0.3, time);
-                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
-                    source.start(time);
-                } else { // Kick (accent1)
-                    const oscillator = audioCtx.createOscillator();
-                    const gainNode = audioCtx.createGain();
-                    oscillator.connect(gainNode).connect(audioCtx.destination);
-                    oscillator.frequency.setValueAtTime(150, time);
-                    oscillator.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
-                    gainNode.gain.setValueAtTime(0.8, time);
-                    gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
-                    oscillator.start(time);
-                    oscillator.stop(time + 0.15);
-                }
-                break;
-            }
-            case 'jazz': {
-                const playRide = () => {
-                    const bufferSize = audioCtx.sampleRate * 0.5;
-                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                    const output = buffer.getChannelData(0);
-                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-                    
-                    const source = audioCtx.createBufferSource();
-                    source.buffer = buffer;
-                    const bqFilter = audioCtx.createBiquadFilter();
-                    bqFilter.type = 'highpass';
-                    bqFilter.frequency.value = 5000;
-                    
-                    const gainNode = audioCtx.createGain();
-                    source.connect(bqFilter).connect(gainNode).connect(audioCtx.destination);
-                    
-                    gainNode.gain.setValueAtTime(0.15, time);
-                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.4);
-                    source.start(time);
-                };
-            
-                const playKick = () => {
-                    const oscillator = audioCtx.createOscillator();
-                    const gainNode = audioCtx.createGain();
-                    oscillator.connect(gainNode).connect(audioCtx.destination);
-                    oscillator.frequency.setValueAtTime(150, time);
-                    oscillator.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
-                    gainNode.gain.setValueAtTime(0.6, time);
-                    gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
-                    oscillator.start(time);
-                    oscillator.stop(time + 0.15);
-                };
-            
-                const playSnare = () => {
-                    const bufferSize = audioCtx.sampleRate * 0.2;
-                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                    const output = buffer.getChannelData(0);
-                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-                    
-                    const source = audioCtx.createBufferSource();
-                    source.buffer = buffer;
-                    const gainNode = audioCtx.createGain();
-                    source.connect(gainNode).connect(audioCtx.destination);
-                    gainNode.gain.setValueAtTime(0.1, time);
-                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
-                    source.start(time);
-                };
-            
-                playRide();
-                if (accent === 'accent1') {
-                    playKick();
-                } else if (accent === 'accent2') {
-                    playSnare();
-                }
-                break;
-            }
-            case 'drops': {
-                const freq = accent === 'accent1' ? 900 : accent === 'accent2' ? 1100 : 1000;
-                const gain = accent === 'accent1' ? 0.4 : accent === 'accent2' ? 0.3 : 0.35;
-                const decay = accent === 'accent1' ? 0.2 : 0.15;
-            
-                const oscillator = audioCtx.createOscillator();
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.4);
+                source.start(time);
+            };
+            const playBrushSnare = () => {
+                 const bufferSize = audioCtx.sampleRate * 0.2;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
                 const gainNode = audioCtx.createGain();
-                const filter = audioCtx.createBiquadFilter();
-                
-                oscillator.connect(filter);
-                filter.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                
-                oscillator.type = 'sine';
-                filter.type = 'lowpass';
-                filter.frequency.value = freq + 200;
+                source.connect(gainNode).connect(audioCtx.destination);
+                gainNode.gain.setValueAtTime(0.1, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
+                source.start(time);
+            };
             
-                gainNode.gain.setValueAtTime(gain, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
-                
-                oscillator.frequency.setValueAtTime(freq, time);
-                oscillator.frequency.exponentialRampToValueAtTime(freq * 0.5, time + decay * 0.8);
-            
-                oscillator.start(time);
-                oscillator.stop(time + decay);
-                break;
+            if (accent === 'accent2') {
+                playBrushSnare();
+            } else {
+                playRide();
             }
-            case 'click':
-            default: {
-                const freq = accent === 'accent1' ? 1200 : accent === 'accent2' ? 1000 : 800;
+            break;
+        }
+        case 'beep': {
+            const freq = accent === 'accent1' ? 880 : accent === 'accent2' ? 660 : 440;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(freq, time);
+            gainNode.gain.setValueAtTime(0.3, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+            oscillator.start(time);
+            oscillator.stop(time + 0.1);
+            break;
+        }
+        case 'drum': {
+            if (accent === 'standard') { // Hi-hat
+                const bufferSize = audioCtx.sampleRate * 0.1;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 7000;
+                const gainNode = audioCtx.createGain();
+                
+                source.connect(filter).connect(gainNode).connect(audioCtx.destination);
+                gainNode.gain.setValueAtTime(0.2, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+                source.start(time);
+            } else if (accent === 'accent2') { // Snare
+                const bufferSize = audioCtx.sampleRate * 0.2;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                const gainNode = audioCtx.createGain();
+                source.connect(gainNode).connect(audioCtx.destination);
+                gainNode.gain.setValueAtTime(0.3, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
+                source.start(time);
+            } else { // Kick (accent1)
                 const oscillator = audioCtx.createOscillator();
                 const gainNode = audioCtx.createGain();
                 oscillator.connect(gainNode).connect(audioCtx.destination);
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(freq, time);
-                gainNode.gain.setValueAtTime(0.4, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+                oscillator.frequency.setValueAtTime(150, time);
+                oscillator.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
+                gainNode.gain.setValueAtTime(0.8, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
                 oscillator.start(time);
-                oscillator.stop(time + 0.05);
-                break;
+                oscillator.stop(time + 0.15);
             }
+            break;
         }
-      };
-  
-      let beat = -1;
-      const interval = (60 / metronomeBPM) * 1000;
-      metronomeIntervalRef.current = window.setInterval(() => {
-        beat = (beat + 1) % beatsPerMeasure;
-        playSound(beat);
-        setCurrentBeat(beat);
-      }, interval);
-    }
-  
-    return () => {
-      if (metronomeIntervalRef.current) {
-        clearInterval(metronomeIntervalRef.current);
-      }
-    };
-  }, [metronomeEnabled, metronomeBPM, metronomeSoundKit, beatsPerMeasure, accentPattern]);
+        case 'jazz': {
+            const playBrush = () => {
+                const bufferSize = audioCtx.sampleRate * 0.3;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                let lastOut = 0.0;
+                for (let i = 0; i < bufferSize; i++) {
+                    const white = Math.random() * 2 - 1;
+                    output[i] = (lastOut + (0.02 * white)) / 1.02;
+                    lastOut = output[i];
+                    output[i] *= 3.5; // boost
+                }
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                const bandpass = audioCtx.createBiquadFilter();
+                bandpass.type = 'bandpass';
+                bandpass.frequency.value = 6000;
+                bandpass.Q.value = 0.5;
+                const highpass = audioCtx.createBiquadFilter();
+                highpass.type = 'highpass';
+                highpass.frequency.value = 300;
+                const gainNode = audioCtx.createGain();
+                source.connect(bandpass).connect(highpass).connect(gainNode).connect(audioCtx.destination);
+                gainNode.gain.setValueAtTime(0, time);
+                gainNode.gain.linearRampToValueAtTime(0.15, time + 0.02);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.25);
+                source.start(time);
+            };
+        
+            const playKick = () => {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode).connect(audioCtx.destination);
+                oscillator.frequency.setValueAtTime(150, time);
+                oscillator.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
+                gainNode.gain.setValueAtTime(0.6, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+                oscillator.start(time);
+                oscillator.stop(time + 0.15);
+            };
+        
+            const playSnare = () => {
+                const bufferSize = audioCtx.sampleRate * 0.2;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const output = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                
+                const source = audioCtx.createBufferSource();
+                source.buffer = buffer;
+                const gainNode = audioCtx.createGain();
+                source.connect(gainNode).connect(audioCtx.destination);
+                gainNode.gain.setValueAtTime(0.08, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+                source.start(time);
+            };
+        
+            playBrush();
+            if (accent === 'accent1') {
+                playKick();
+            } else if (accent === 'accent2') {
+                playSnare();
+            }
+            break;
+        }
+        case 'drops': {
+            const freq = accent === 'accent1' ? 600 : accent === 'accent2' ? 700 : 650;
+            const gainVal = accent === 'accent1' ? 0.4 : 0.3;
+            const decay = accent === 'accent1' ? 0.3 : 0.2;
+            
+            const osc = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            osc.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            osc.type = 'sine';
+            
+            osc.frequency.setValueAtTime(freq * 2.5, time);
+            osc.frequency.exponentialRampToValueAtTime(freq, time + 0.05);
 
+            gainNode.gain.setValueAtTime(gainVal, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
+            
+            osc.start(time);
+            osc.stop(time + decay + 0.1);
+            break;
+        }
+        case 'click':
+        default: {
+            const freq = accent === 'accent1' ? 1200 : accent === 'accent2' ? 1000 : 800;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode).connect(audioCtx.destination);
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(freq, time);
+            gainNode.gain.setValueAtTime(0.4, time);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+            oscillator.start(time);
+            oscillator.stop(time + 0.05);
+            break;
+        }
+    }
+  }, [accentPattern, metronomeSoundKit]);
+
+
+  useEffect(() => {
+    const clearMetronome = () => {
+      if (metronomeTimeoutRef.current) {
+        clearTimeout(metronomeTimeoutRef.current);
+        metronomeTimeoutRef.current = null;
+      }
+      setCurrentBeat(null);
+    };
+
+    if (!metronomeEnabled) {
+      clearMetronome();
+      return;
+    }
+
+    // Reset counters and BPM on start
+    beatCounterRef.current = -1;
+    measureCounterRef.current = 0;
+    currentBPMRef.current = speedTrainerEnabled ? startBPM : metronomeBPM;
+    setCurrentDynamicBPM(currentBPMRef.current);
+
+
+    const tick = () => {
+      // --- Update Beat and Measure Counters ---
+      beatCounterRef.current = (beatCounterRef.current + 1) % beatsPerMeasure;
+      if (beatCounterRef.current === 0) {
+        measureCounterRef.current++;
+      }
+
+      // --- Play Sound ---
+      playSound(beatCounterRef.current);
+      setCurrentBeat(beatCounterRef.current);
+
+      // --- Speed Trainer Logic ---
+      if (speedTrainerEnabled) {
+        // Check if a BPM update is due
+        if (measureCounterRef.current > 0 && measureCounterRef.current % everyNMeasures === 0 && beatCounterRef.current === 0) {
+          const isAccelerating = targetBPM > startBPM;
+          let nextBPM = currentBPMRef.current + (isAccelerating ? increaseBy : -increaseBy);
+
+          if (isAccelerating) {
+            nextBPM = Math.min(nextBPM, targetBPM);
+          } else {
+            nextBPM = Math.max(nextBPM, targetBPM);
+          }
+          
+          if(nextBPM !== currentBPMRef.current) {
+            currentBPMRef.current = nextBPM;
+            setCurrentDynamicBPM(nextBPM);
+          }
+        }
+      } else {
+        // Ensure BPM is correct in normal mode
+        if (currentBPMRef.current !== metronomeBPM) {
+            currentBPMRef.current = metronomeBPM;
+            setCurrentDynamicBPM(metronomeBPM);
+        }
+      }
+
+      // --- Schedule Next Tick ---
+      const interval = (60 / currentBPMRef.current) * 1000;
+      metronomeTimeoutRef.current = window.setTimeout(tick, interval);
+    };
+
+    tick(); // Start the metronome
+
+    return clearMetronome;
+  }, [
+    metronomeEnabled, metronomeBPM, beatsPerMeasure, playSound,
+    speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures
+  ]);
+
+  // Sync Breath Speed with Metronome
+  useEffect(() => {
+    if (syncBreathWithMetronome) {
+        const bpmForSync = speedTrainerEnabled ? currentDynamicBPM : metronomeBPM;
+        const measureDurationSeconds = (60 / bpmForSync) * beatsPerMeasure;
+        const newBreathSpeed = measureDurationSeconds * syncMultiplier;
+        if (Math.abs(settings.breathSpeed - newBreathSpeed) > 0.01) {
+            setSettings(prev => ({ ...prev, breathSpeed: parseFloat(newBreathSpeed.toFixed(2)) }));
+        }
+    }
+  }, [metronomeBPM, currentDynamicBPM, beatsPerMeasure, syncBreathWithMetronome, syncMultiplier, speedTrainerEnabled, settings.breathSpeed]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -524,39 +836,52 @@ const App: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  const handleRestart = () => {
+    animationKeyRef.current += 1; // Use ref to trigger restart
+    lastTimestampRef.current = null;
+    breathPhaseRef.current = 0;
+    curvePhaseRef.current = 0;
+    colorPhaseRef.current = 0;
+  };
+
   useEffect(() => {
     let animationFrameId: number;
-    let startTime = 0;
     
     const COLORS = {
-      dark: '#000000', // Pure Black
-      light: '#ffffff', // Pure White
+      dark: '#000000',
+      light: '#ffffff',
     };
 
     const animate = (timestamp: number) => {
-      if (!startTime) startTime = timestamp;
-      const elapsed = timestamp - startTime;
+      if (lastTimestampRef.current === null) {
+        lastTimestampRef.current = timestamp;
+      }
+      const deltaTime = timestamp - lastTimestampRef.current;
+      lastTimestampRef.current = timestamp;
 
-      // --- Main Symbol Breath Animation ---
+      // Update phases based on delta time and current speed settings
+      // This allows for smooth speed changes without resetting the animation
+      if (breathSpeed > 0) {
+        breathPhaseRef.current = (breathPhaseRef.current + deltaTime / (breathSpeed * 1000)) % 1;
+      }
+      if (curveSpeed > 0) {
+        curvePhaseRef.current = (curvePhaseRef.current + deltaTime / (curveSpeed * 1000)) % 1;
+      }
+      if (eyeColorSpeed > 0) {
+        colorPhaseRef.current = (colorPhaseRef.current + deltaTime / (eyeColorSpeed * 1000)) % 1;
+      }
+      
       const minScale = minBreathPercent / maxBreathPercent;
-      const breathPeriod = breathSpeed * 1000;
-      const breathPhase = (elapsed % breathPeriod) / breathPeriod;
-      const breathEasedValue = (1 - Math.cos(breathPhase * 2 * Math.PI)) / 2;
+      const breathEasedValue = (1 - Math.cos(breathPhaseRef.current * 2 * Math.PI)) / 2;
       const currentScale = lerp(minScale, 1.0, breathEasedValue);
       setAnimatedScale(currentScale);
 
-      // --- Curve Radius Animation ---
-      const curvePeriod = curveSpeed * 1000;
-      const curvePhase = (elapsed % curvePeriod) / curvePeriod;
-      const curveEasedValue = Math.pow(Math.sin(curvePhase * Math.PI), 4);
+      const curveEasedValue = Math.pow(Math.sin(curvePhaseRef.current * Math.PI), 4);
       const curveRange = maxCurveRadius - 25;
       const currentRadius = 25 + (curveRange * curveEasedValue);
       setAnimatedCurveRadius(currentRadius);
 
-      // --- Eyes Color Animation ---
-      const colorPeriod = eyeColorSpeed * 1000;
-      const colorPhase = (elapsed % colorPeriod) / colorPeriod;
-      const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
+      const easedColorValue = (1 - Math.cos(colorPhaseRef.current * 2 * Math.PI)) / 2;
       const inversionAmount = eyeColorInversion / 100;
       const colorInversionFactor = easedColorValue * inversionAmount;
 
@@ -568,12 +893,13 @@ const App: React.FC = () => {
 
       animationFrameId = requestAnimationFrame(animate);
     };
+    
     animationFrameId = requestAnimationFrame(animate);
+    
     return () => cancelAnimationFrame(animationFrameId);
   }, [
-      viewportSize, minBreathPercent, maxBreathPercent, breathSpeed, 
-      maxCurveRadius, curveSpeed, eyeColorSpeed, eyeColorInversion, 
-      animationKey
+      minBreathPercent, maxBreathPercent, maxCurveRadius, eyeColorInversion, 
+      breathSpeed, curveSpeed, eyeColorSpeed // Keep speeds here to update phase calculation
   ]);
 
 
@@ -584,10 +910,6 @@ const App: React.FC = () => {
       document.documentElement.classList.remove('dark');
     }
   }, [bgLightness]);
-
-  const handleRestart = () => {
-    setAnimationKey(prevKey => prevKey + 1);
-  };
   
   const handleExportHtml = () => {
     // This function exports a simplified version and does not include the new metronome features.
@@ -736,9 +1058,9 @@ const App: React.FC = () => {
   };
   
   const handleSettingChange = (key: keyof Settings, value: any) => {
-    // Special handling for metronome enabling to deal with AudioContext policies
     if (key === 'metronomeEnabled') {
       if (value === true) {
+        handleRestart();
         const initializeAndStart = async () => {
           try {
             if (!audioCtxRef.current) {
@@ -747,7 +1069,6 @@ const App: React.FC = () => {
             if (audioCtxRef.current.state === 'suspended') {
               await audioCtxRef.current.resume();
             }
-            // Only set enabled to true after context is successfully running
             setSettings(prev => ({ ...prev, metronomeEnabled: true }));
           } catch (error) {
             console.error("Failed to initialize or resume AudioContext:", error);
@@ -756,15 +1077,20 @@ const App: React.FC = () => {
         };
         initializeAndStart();
       } else {
-        // Just turn it off
         setSettings(prev => ({ ...prev, metronomeEnabled: false }));
       }
-      setSelectedPreset(''); // Deselect preset when this is toggled
+      setSelectedPreset('');
       return;
     }
 
+    if (key === 'breathSpeed' && settings.syncBreathWithMetronome) {
+        setSettings(prev => ({ ...prev, breathSpeed: value, syncBreathWithMetronome: false }));
+        setSelectedPreset('');
+        return;
+    }
+
     setSettings(prev => ({ ...prev, [key]: value }));
-    setSelectedPreset(''); // Deselect preset when a manual change is made
+    setSelectedPreset('');
   };
 
   const handleMinRadiusChange = (value: number) => {
@@ -812,7 +1138,7 @@ const App: React.FC = () => {
       const updatedPresets = customPresets.filter(p => p.name !== nameToDelete);
       setCustomPresets(updatedPresets);
       localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(updatedPresets));
-      setSelectedPreset(''); // Reset dropdown after deletion
+      setSelectedPreset('');
     }
   };
 
@@ -847,7 +1173,7 @@ const App: React.FC = () => {
       if (touchStartY === null) return;
       const touchEndY = e.changedTouches[0].clientY;
       const deltaY = touchEndY - touchStartY;
-      if (deltaY > 50) { // Swiped down
+      if (deltaY > 50) {
           setIsPanelOpen(false);
       }
       setTouchStartY(null);
@@ -879,11 +1205,29 @@ const App: React.FC = () => {
     setSettings(prev => ({ ...prev, beatsPerMeasure: safeBeats, accentPattern: newPattern }));
     setSelectedPreset('');
   };
+  
+  const calculateTimeToTarget = () => {
+    if (!speedTrainerEnabled || increaseBy <= 0 || (startBPM >= targetBPM && increaseBy > 0) || (startBPM <= targetBPM && increaseBy < 0)) {
+        return null;
+    }
+    let totalSeconds = 0;
+    let currentBpm = startBPM;
+    const isAccelerating = targetBPM > startBPM;
 
+    while (isAccelerating ? currentBpm < targetBPM : currentBpm > targetBPM) {
+        const secondsPerMeasure = (60 / currentBpm) * beatsPerMeasure;
+        totalSeconds += secondsPerMeasure * everyNMeasures;
+        currentBpm += isAccelerating ? increaseBy : -increaseBy;
+    }
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.round(totalSeconds % 60);
+    return `Approx. ${minutes} min${minutes !== 1 ? 's' : ''} ${seconds} sec${seconds !== 1 ? 's' : ''} taken to reach ${targetBPM} BPM`;
+  };
 
   const baseSize = (maxBreathPercent / 100) * Math.min(viewportSize.width, viewportSize.height) * 0.9;
 
-  const warmthFactor = (bgWarmth - 50) / 50; // -1 to 1
+  const warmthFactor = (bgWarmth - 50) / 50;
   const saturation = Math.abs(warmthFactor) * 40;
   const hue = warmthFactor > 0 ? 40 : 220;
   const bgColor = `hsl(${hue}, ${saturation}%, ${bgLightness}%)`;
@@ -911,7 +1255,7 @@ const App: React.FC = () => {
     backdropFilter: `blur(${panelBlur}px)`,
     WebkitBackdropFilter: `blur(${panelBlur}px)`,
   };
-
+  
   const renderPanelContent = () => {
     switch(panelView) {
       case 'interface':
@@ -995,12 +1339,14 @@ const App: React.FC = () => {
               </div>
               <div className="mb-4">
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                  Breath Speed ({breathSpeed}s)
+                    Breath Speed ({breathSpeed}s)
+                    {syncBreathWithMetronome && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Synced)</span>}
                 </label>
                 <input
                   type="range" min="1" max="180" value={breathSpeed}
                   onChange={(e) => handleSettingChange('breathSpeed', Number(e.target.value))}
-                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                  disabled={syncBreathWithMetronome}
+                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
               <div className="mb-4">
@@ -1152,6 +1498,7 @@ const App: React.FC = () => {
           </>
         );
       case 'metronome':
+        const timeToTargetStr = calculateTimeToTarget();
         return (
           <>
             <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
@@ -1162,80 +1509,94 @@ const App: React.FC = () => {
                     <span>Metronome</span>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6">
-                <label htmlFor="metronome-toggle" className="flex items-center justify-between cursor-pointer p-2 rounded-lg hover:bg-slate-500/10">
-                  <span className="text-lg font-medium text-slate-800 dark:text-slate-200">
-                    Enable Metronome
-                  </span>
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      id="metronome-toggle"
-                      className="sr-only"
-                      checked={metronomeEnabled}
-                      onChange={(e) => handleSettingChange('metronomeEnabled', e.target.checked)}
-                    />
-                    <div className="block bg-slate-300 dark:bg-slate-600 w-14 h-8 rounded-full"></div>
-                    <div className={`dot absolute left-1 top-1 bg-white w-6 h-6 rounded-full transition-transform ${metronomeEnabled ? 'translate-x-6 bg-blue-500' : ''}`}></div>
-                  </div>
-                </label>
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 flex flex-col">
+              <button
+                onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
+                className={`w-full py-3 rounded-xl text-white text-xl font-bold transition-all duration-150 flex items-center justify-center shadow-lg
+                            ${metronomeEnabled 
+                                ? 'bg-red-600 hover:bg-red-700' 
+                                : 'bg-green-600 hover:bg-green-700'}`}
+                aria-label={metronomeEnabled ? 'Stop Metronome' : 'Start Metronome'}
+              >
+                {metronomeEnabled ? 'Stop' : 'Start'}
+              </button>
               
-              <div className={`space-y-6 transition-opacity ${metronomeEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
-                    <div>
-                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Accent Pattern</label>
-                      <div className="grid grid-cols-4 gap-3">
-                        {accentPattern.map((accent, index) => (
-                          <button
-                            key={index}
-                            onClick={() => handleAccentChange(index)}
-                            className={`relative w-full aspect-square rounded-xl text-white text-xl font-bold transition-all duration-150 flex items-center justify-center
-                                        ${ACCENT_CONFIG[accent].color} 
-                                        ${currentBeat === index ? `ring-4 ${ACCENT_CONFIG[accent].ringColor}` : 'ring-0'}`}
-                            title={ACCENT_CONFIG[accent].label}
-                            aria-label={`Beat ${index + 1}: ${ACCENT_CONFIG[accent].label}. Click to change.`}
-                            disabled={!metronomeEnabled}
-                          >
-                          <span className="drop-shadow-sm">{index + 1}</span>
-                          </button>
-                        ))}
-                      </div>
+              <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Accent Pattern</label>
+                    <div className="grid grid-cols-4 gap-3">
+                      {accentPattern.map((accent, index) => (
+                        <button
+                          key={index}
+                          onClick={() => handleAccentChange(index)}
+                          className={`relative w-full aspect-square rounded-xl text-white text-xl font-bold transition-all duration-150 flex items-center justify-center
+                                      ${ACCENT_CONFIG[accent].color} 
+                                      ${currentBeat === index ? `ring-4 ${ACCENT_CONFIG[accent].ringColor}` : 'ring-0'}`}
+                          title={ACCENT_CONFIG[accent].label}
+                          aria-label={`Beat ${index + 1}: ${ACCENT_CONFIG[accent].label}. Click to change.`}
+                        >
+                        <span className="drop-shadow-sm">{index + 1}</span>
+                        </button>
+                      ))}
                     </div>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="beats-per-measure" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                Beats
-                            </label>
-                            <select
-                                id="beats-per-measure"
-                                value={beatsPerMeasure}
-                                onChange={(e) => handleBeatsPerMeasureChange(Number(e.target.value))}
-                                className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
-                                disabled={!metronomeEnabled}
-                            >
-                                {[...Array(15)].map((_, i) => <option key={i+2} value={i+2}>{i+2}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                                Sound Kit
-                            </label>
-                            <select
-                                id="metronome-sound"
-                                value={metronomeSoundKit}
-                                onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as 'click' | 'beep' | 'drum' | 'jazz' | 'drops')}
-                                className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
-                                disabled={!metronomeEnabled}
-                            >
-                                <option value="click">Click</option>
-                                <option value="beep">Beep</option>
-                                <option value="drum">Drum Kit</option>
-                                <option value="jazz">Jazz Drums</option>
-                                <option value="drops">Water Drops</option>
-                            </select>
-                        </div>
+                  <div className="grid grid-cols-2 gap-4">
+                      <div>
+                          <label htmlFor="beats-per-measure" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Beats
+                          </label>
+                          <select
+                              id="beats-per-measure"
+                              value={beatsPerMeasure}
+                              onChange={(e) => handleBeatsPerMeasureChange(Number(e.target.value))}
+                              className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                          >
+                              {[...Array(15)].map((_, i) => <option key={i+2} value={i+2}>{i+2}</option>)}
+                          </select>
+                      </div>
+                      <div>
+                          <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Sound Kit
+                          </label>
+                          <select
+                              id="metronome-sound"
+                              value={metronomeSoundKit}
+                              onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as MetronomeSoundKit)}
+                              className="w-full px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                          >
+                              <option value="click">Click</option>
+                              <option value="beep">Beep</option>
+                              <option value="drum">Drum Kit</option>
+                              <option value="jazz">Jazz Drums</option>
+                              <option value="jazz_ride">Jazz Ride</option>
+                              <option value="drops">Water Drops</option>
+                              <option value="marimba">Marimba</option>
+                          </select>
+                      </div>
+                  </div>
+                
+                <hr className="border-slate-200/50 dark:border-slate-700/50" />
+                
+                <div className="flex items-center justify-between">
+                    <label className="font-medium text-slate-800 dark:text-slate-200">Speed Trainer</label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" checked={speedTrainerEnabled} onChange={(e) => handleSettingChange('speedTrainerEnabled', e.target.checked)} className="sr-only peer" />
+                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                {speedTrainerEnabled ? (
+                    <div className="space-y-4 p-4 bg-slate-500/10 rounded-xl">
+                      <div className="grid grid-cols-2 gap-4">
+                        <NumberInput label="Start BPM" value={startBPM} onChange={v => handleSettingChange('startBPM', v)} min={20} max={400} step={1} />
+                        <NumberInput label="Target BPM" value={targetBPM} onChange={v => handleSettingChange('targetBPM', v)} min={20} max={400} step={1} />
+                        <NumberInput label="Increase By" value={increaseBy} onChange={v => handleSettingChange('increaseBy', v)} min={1} max={50} step={1} />
+                        <NumberInput label="Every Bar" value={everyNMeasures} onChange={v => handleSettingChange('everyNMeasures', v)} min={1} max={32} step={1} />
+                      </div>
+                      {timeToTargetStr && <p className="text-xs text-center text-slate-600 dark:text-slate-400 pt-2">{timeToTargetStr}</p>}
                     </div>
-                  
+                ) : (
                     <div>
                       <div className="flex justify-between items-center mb-1">
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1244,16 +1605,49 @@ const App: React.FC = () => {
                         <span className="text-lg font-mono font-semibold text-slate-800 dark:text-slate-200">{metronomeBPM}</span>
                       </div>
                       <div className="flex items-center gap-3">
-                         <button onClick={() => handleSettingChange('metronomeBPM', Math.max(20, metronomeBPM - 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors" disabled={!metronomeEnabled}>-</button>
+                         <button onClick={() => handleSettingChange('metronomeBPM', Math.max(20, metronomeBPM - 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">-</button>
                          <input
                           type="range" min="20" max="400" value={metronomeBPM}
                           onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
                           className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                          disabled={!metronomeEnabled}
                         />
-                         <button onClick={() => handleSettingChange('metronomeBPM', Math.min(400, metronomeBPM + 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors" disabled={!metronomeEnabled}>+</button>
+                         <button onClick={() => handleSettingChange('metronomeBPM', Math.min(400, metronomeBPM + 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">+</button>
                       </div>
-                  </div>
+                    </div>
+                )}
+
+
+                <hr className="border-slate-200/50 dark:border-slate-700/50" />
+                
+                <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={syncBreathWithMetronome}
+                            onChange={(e) => handleSettingChange('syncBreathWithMetronome', e.target.checked)}
+                            className="h-5 w-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-blue-600"
+                        />
+                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                            Sync with Breath Speed
+                        </span>
+                    </label>
+
+                    {syncBreathWithMetronome && (
+                    <div className="flex items-center gap-2">
+                        <label htmlFor="sync-multiplier" className="font-medium text-slate-800 dark:text-slate-200">
+                            X
+                        </label>
+                        <select
+                            id="sync-multiplier"
+                            value={syncMultiplier}
+                            onChange={(e) => handleSettingChange('syncMultiplier', Number(e.target.value))}
+                            className="w-20 px-3 py-2 bg-slate-200 dark:bg-slate-700 border border-slate-300/50 dark:border-slate-600/50 rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none"
+                        >
+                            {[...Array(8)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                        </select>
+                    </div>
+                    )}
+                </div>
               </div>
             </div>
           </>
@@ -1429,7 +1823,7 @@ const App: React.FC = () => {
               <div style={{ ...glowStyle, transform: `scale(${animatedScale})`}} />
               <div style={{ transform: `scale(${animatedScale})`}}>
                 <YinYang 
-                    key={animationKey}
+                    key={animationKeyRef.current}
                     size={baseSize}
                     rotationSpeed={rotationSpeed} 
                     pulseSpeed={pulseSpeed} 
