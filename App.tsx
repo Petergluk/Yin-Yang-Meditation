@@ -75,11 +75,13 @@ const YinYang: React.FC<YinYangProps> = ({
   
   const eyeCenterYTop = center - mainRadius / 2;
   const eyeCenterYBottom = center + mainRadius / 2;
+  
+  const minScale = minRadius / maxRadius;
 
   const basePulseStyle = {
     animationDuration: `${pulseSpeed}s`,
-    '--min-radius': minRadius,
-    '--max-radius': maxRadius,
+    '--min-scale': minScale,
+    '--max-scale': 1,
   } as React.CSSProperties;
 
   const invertedPulseStyle = invertPulsePhase ? {
@@ -110,8 +112,8 @@ const YinYang: React.FC<YinYangProps> = ({
                   fill="#ffffff"
               />
               <g transform={`rotate(${eyeAngleOffset} ${center} ${center})`}>
-                <circle cx={center} cy={eyeCenterYTop} className="animate-pulse-size" style={{...basePulseStyle, fill: darkEyeColor}} />
-                <circle cx={center} cy={eyeCenterYBottom} className="animate-pulse-size" style={{...invertedPulseStyle, fill: lightEyeColor}} />
+                <circle cx={center} cy={eyeCenterYTop} r={maxRadius} className="animate-pulse-scale" style={{...basePulseStyle, fill: darkEyeColor, transformOrigin: `${center}px ${eyeCenterYTop}px`}} />
+                <circle cx={center} cy={eyeCenterYBottom} r={maxRadius} className="animate-pulse-scale" style={{...invertedPulseStyle, fill: lightEyeColor, transformOrigin: `${center}px ${eyeCenterYBottom}px`}} />
               </g>
           </svg>
       </div>
@@ -494,7 +496,11 @@ const App: React.FC = () => {
             whitePath.setAttribute('fill', '#ffffff');
             eyeGroup.setAttribute('transform', \`rotate(\${settings.eyeAngleOffset} \${center} \${center})\`);
             darkEyeCircle.setAttribute('cx', center); darkEyeCircle.setAttribute('cy', eyeCenterYTop);
+            darkEyeCircle.setAttribute('r', settings.maxRadius);
+            darkEyeCircle.style.transformOrigin = \`\${center}px \${eyeCenterYTop}px\`;
             lightEyeCircle.setAttribute('cx', center); lightEyeCircle.setAttribute('cy', eyeCenterYBottom);
+            lightEyeCircle.setAttribute('r', settings.maxRadius);
+            lightEyeCircle.style.transformOrigin = \`\${center}px \${eyeCenterYBottom}px\`;
             
             let metronomePulse = false;
             if (settings.metronomeEnabled && audioCtx) {
@@ -550,20 +556,23 @@ const App: React.FC = () => {
                 const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
                 const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
                 const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
-                const lightEyeColor = lerpColor('#ffffff', '#000000', colorInversionFactor);
+                const lightEyeColor = lerpColor('#ffffff', '#dark', colorInversionFactor);
                 const pulsePeriod = settings.pulseSpeed * 1000;
+                const minEyeScale = settings.minRadius / settings.maxRadius;
                 const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
                 const darkEyeEasedValue = (1 - Math.cos(darkEyePhase * 2 * Math.PI)) / 2;
-                const darkEyeRadius = lerp(settings.minRadius, settings.maxRadius, darkEyeEasedValue);
+                const darkEyeScale = lerp(minEyeScale, 1, darkEyeEasedValue);
                 const lightEyeElapsed = settings.invertPulsePhase ? elapsed + (pulsePeriod / 2) : elapsed;
                 const lightEyePhase = (lightEyeElapsed % pulsePeriod) / pulsePeriod;
                 const lightEyeEasedValue = (1 - Math.cos(lightEyePhase * 2 * Math.PI)) / 2;
-                const lightEyeRadius = lerp(settings.minRadius, settings.maxRadius, lightEyeEasedValue);
+                const lightEyeScale = lerp(minEyeScale, 1, lightEyeEasedValue);
                 symbolWrapper.style.width = \`\${baseSize}px\`; symbolWrapper.style.height = \`\${baseSize}px\`;
                 svgContainer.style.width = \`\${baseSize}px\`; svgContainer.style.height = \`\${baseSize}px\`;
                 breathWrapper.style.transform = \`scale(\${currentScale})\`; whitePath.setAttribute('d', pathD);
-                darkEyeCircle.setAttribute('fill', darkEyeColor); darkEyeCircle.setAttribute('r', darkEyeRadius);
-                lightEyeCircle.setAttribute('fill', lightEyeColor); lightEyeCircle.setAttribute('r', lightEyeRadius);
+                darkEyeCircle.setAttribute('fill', darkEyeColor);
+                darkEyeCircle.style.transform = \`scale(\${darkEyeScale})\`;
+                lightEyeCircle.setAttribute('fill', lightEyeColor);
+                lightEyeCircle.style.transform = \`scale(\${lightEyeScale})\`;
                 const warmthFactor = (settings.bgWarmth - 50) / 50; const saturation = Math.abs(warmthFactor) * 40;
                 const hue = warmthFactor > 0 ? 40 : 220;
                 main.style.backgroundColor = \`hsl(\${hue}, \${saturation}%, \${settings.bgLightness}%)\`;

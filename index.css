@@ -15,16 +15,16 @@
   animation: spin-continuous linear infinite;
 }
 
-@keyframes pulse-size {
+@keyframes pulse-scale {
   0%,
   100% {
-    r: var(--min-radius);
+    transform: scale(var(--min-scale));
   }
   50% {
-    r: var(--max-radius);
+    transform: scale(var(--max-scale));
   }
 }
 
-.animate-pulse-size {
-  animation: pulse-size linear infinite;
+.animate-pulse-scale {
+  animation: pulse-scale linear infinite;
 }
