@@ -122,6 +122,16 @@ const YinYang: React.FC<YinYangProps> = ({
 };
 
 // --- Settings and Presets Configuration ---
+type AccentType = 'skip' | 'standard' | 'accent1' | 'accent2';
+
+const ACCENT_CONFIG: Record<AccentType, { color: string, borderColor: string, label: string }> = {
+  skip: { color: 'bg-slate-200 dark:bg-slate-700', borderColor: 'border-slate-400 dark:border-slate-500', label: 'Skip' },
+  standard: { color: 'bg-green-500/80', borderColor: 'border-green-400', label: 'Standard' },
+  accent1: { color: 'bg-red-500/80', borderColor: 'border-red-400', label: 'Accent 1' },
+  accent2: { color: 'bg-yellow-500/80', borderColor: 'border-yellow-400', label: 'Accent 2' },
+};
+
+
 interface Settings {
   rotationSpeed: number;
   pulseSpeed: number;
@@ -142,7 +152,9 @@ interface Settings {
   glowSize: number;
   metronomeEnabled: boolean;
   metronomeBPM: number;
-  metronomeSound: 'click' | 'beep';
+  metronomeSoundKit: 'click' | 'beep' | 'drum';
+  beatsPerMeasure: number;
+  accentPattern: AccentType[];
 }
 
 interface Preset {
@@ -172,7 +184,9 @@ const initialSettings: Settings = {
   glowSize: 25,
   metronomeEnabled: false,
   metronomeBPM: 60,
-  metronomeSound: 'click',
+  metronomeSoundKit: 'click',
+  beatsPerMeasure: 4,
+  accentPattern: ['accent1', 'standard', 'standard', 'standard'],
 };
 
 const defaultPresets: Preset[] = [
@@ -201,6 +215,10 @@ const defaultPresets: Preset[] = [
       bgLightness: 81,
       bgWarmth: 0,
       glowSize: 50,
+      metronomeBPM: 50,
+      beatsPerMeasure: 4,
+      accentPattern: ['accent1', 'skip', 'standard', 'skip'],
+      metronomeSoundKit: 'beep',
     },
   },
   {
@@ -224,6 +242,10 @@ const defaultPresets: Preset[] = [
       bgLightness: 85,
       bgWarmth: 100,
       glowSize: 25,
+      metronomeBPM: 120,
+      beatsPerMeasure: 4,
+      accentPattern: ['accent1', 'standard', 'accent2', 'standard'],
+      metronomeSoundKit: 'drum',
     },
   },
   {
@@ -247,6 +269,10 @@ const defaultPresets: Preset[] = [
       bgLightness: 7,
       bgWarmth: 0,
       glowSize: 100,
+      metronomeBPM: 70,
+      beatsPerMeasure: 5,
+      accentPattern: ['accent1', 'standard', 'standard', 'accent2', 'standard'],
+      metronomeSoundKit: 'click',
     },
   },
 ];
@@ -264,7 +290,7 @@ const App: React.FC = () => {
   const [customPresets, setCustomPresets] = useState<Preset[]>([]);
   const [newPresetName, setNewPresetName] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('');
-  const [metronomeVisualPulse, setMetronomeVisualPulse] = useState(false);
+  const [currentBeat, setCurrentBeat] = useState<number | null>(null);
   const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome'>('main');
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   
@@ -278,7 +304,8 @@ const App: React.FC = () => {
     maxCurveRadius, curveSpeed, invertPulsePhase,
     eyeAngleOffset, borderWidth, eyeColorInversion,
     eyeColorSpeed, bgLightness, bgWarmth, glowSize,
-    metronomeEnabled, metronomeBPM, metronomeSound,
+    metronomeEnabled, metronomeBPM, metronomeSoundKit,
+    beatsPerMeasure, accentPattern
   } = settings;
 
   useEffect(() => {
@@ -297,43 +324,99 @@ const App: React.FC = () => {
     if (metronomeIntervalRef.current) {
       clearInterval(metronomeIntervalRef.current);
     }
+    setCurrentBeat(null);
   
     if (metronomeEnabled) {
       const audioCtx = audioCtxRef.current;
       if (!audioCtx || audioCtx.state !== 'running') return;
   
-      const playSound = () => {
+      const playSound = (beatIndex: number) => {
+        const accent = accentPattern[beatIndex];
+        if (accent === 'skip') return;
         const time = audioCtx.currentTime;
-        if (metronomeSound === 'beep') {
-          const oscillator = audioCtx.createOscillator();
-          const gainNode = audioCtx.createGain();
-          oscillator.connect(gainNode);
-          gainNode.connect(audioCtx.destination);
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(880, time);
-          gainNode.gain.setValueAtTime(0.5, time);
-          gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
-          oscillator.start(time);
-          oscillator.stop(time + 0.1);
-        } else { // 'click'
-          const bufferSize = audioCtx.sampleRate * 0.05; // 50ms
-          const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-          const output = buffer.getChannelData(0);
-          for (let i = 0; i < 100; i++) {
-            output[i] = Math.random() * 2 - 1;
-          }
-          const source = audioCtx.createBufferSource();
-          source.buffer = buffer;
-          source.connect(audioCtx.destination);
-          source.start(time);
+
+        switch (metronomeSoundKit) {
+            case 'beep': {
+                const freq = accent === 'accent1' ? 880 : accent === 'accent2' ? 660 : 440;
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(freq, time);
+                gainNode.gain.setValueAtTime(0.3, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+                oscillator.start(time);
+                oscillator.stop(time + 0.1);
+                break;
+            }
+            case 'drum': {
+                if (accent === 'standard') { // Hi-hat
+                    const bufferSize = audioCtx.sampleRate * 0.1;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                    
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = 'highpass';
+                    filter.frequency.value = 7000;
+                    const gainNode = audioCtx.createGain();
+                    
+                    source.connect(filter).connect(gainNode).connect(audioCtx.destination);
+                    gainNode.gain.setValueAtTime(0.2, time);
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+                    source.start(time);
+                } else if (accent === 'accent2') { // Snare
+                    const bufferSize = audioCtx.sampleRate * 0.2;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                    
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    const gainNode = audioCtx.createGain();
+                    source.connect(gainNode).connect(audioCtx.destination);
+                    gainNode.gain.setValueAtTime(0.3, time);
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
+                    source.start(time);
+                } else { // Kick (accent1)
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+                    oscillator.connect(gainNode).connect(audioCtx.destination);
+                    oscillator.frequency.setValueAtTime(150, time);
+                    oscillator.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
+                    gainNode.gain.setValueAtTime(0.8, time);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+                    oscillator.start(time);
+                    oscillator.stop(time + 0.15);
+                }
+                break;
+            }
+            case 'click':
+            default: {
+                const freq = accent === 'accent1' ? 1200 : accent === 'accent2' ? 1000 : 800;
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode).connect(audioCtx.destination);
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(freq, time);
+                gainNode.gain.setValueAtTime(0.4, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+                oscillator.start(time);
+                oscillator.stop(time + 0.05);
+                break;
+            }
         }
       };
   
+      let beat = -1;
       const interval = (60 / metronomeBPM) * 1000;
       metronomeIntervalRef.current = window.setInterval(() => {
-        playSound();
-        setMetronomeVisualPulse(true);
-        setTimeout(() => setMetronomeVisualPulse(false), 100);
+        beat = (beat + 1) % beatsPerMeasure;
+        playSound(beat);
+        setCurrentBeat(beat);
       }, interval);
     }
   
@@ -342,7 +425,7 @@ const App: React.FC = () => {
         clearInterval(metronomeIntervalRef.current);
       }
     };
-  }, [metronomeEnabled, metronomeBPM, metronomeSound]);
+  }, [metronomeEnabled, metronomeBPM, metronomeSoundKit, beatsPerMeasure, accentPattern]);
 
 
   useEffect(() => {
@@ -419,6 +502,8 @@ const App: React.FC = () => {
   };
   
   const handleExportHtml = () => {
+    // This function exports a simplified version and does not include the new metronome features.
+    // It's kept for basic animation export functionality.
     const generatedHtml = `
 <!DOCTYPE html>
 <html lang="en">
@@ -442,18 +527,7 @@ const App: React.FC = () => {
             overlay.style.display = 'none';
             
             const settings = ${JSON.stringify(settings)};
-            let audioCtx = null;
             
-            const initAudio = () => {
-                if (settings.metronomeEnabled && !audioCtx) {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    if (audioCtx.state === 'suspended') {
-                        audioCtx.resume();
-                    }
-                }
-            };
-            initAudio(); // Initialize on first click
-
             const hexToRgb = (hex) => {
                 const result = /^#?([a-f\\d]{2})([a-f\\d]{2})([a-f\\d]{2})$/i.exec(hex);
                 return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : null;
@@ -508,40 +582,6 @@ const App: React.FC = () => {
             lightEyeCircle.setAttribute('cx', 0); lightEyeCircle.setAttribute('cy', eyeCenterYBottom);
             lightEyeCircle.setAttribute('r', settings.maxRadius);
             lightEyeCircle.style.transformOrigin = \`0px \${eyeCenterYBottom}px\`;
-            
-            let metronomePulse = false;
-            if (settings.metronomeEnabled && audioCtx) {
-                const playSound = () => {
-                    if (audioCtx.state !== 'running') return;
-                    const time = audioCtx.currentTime;
-                    if (settings.metronomeSound === 'beep') {
-                        const osc = audioCtx.createOscillator();
-                        const gain = audioCtx.createGain();
-                        osc.connect(gain);
-                        gain.connect(audioCtx.destination);
-                        osc.type = 'sine';
-                        osc.frequency.setValueAtTime(880, time);
-                        gain.gain.setValueAtTime(0.5, time);
-                        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
-                        osc.start(time);
-                        osc.stop(time + 0.1);
-                    } else {
-                        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
-                        const output = buffer.getChannelData(0);
-                        for (let i = 0; i < 100; i++) { output[i] = Math.random() * 2 - 1; }
-                        const source = audioCtx.createBufferSource();
-                        source.buffer = buffer;
-                        source.connect(audioCtx.destination);
-                        source.start(time);
-                    }
-                };
-                const interval = (60 / settings.metronomeBPM) * 1000;
-                setInterval(() => {
-                    playSound();
-                    metronomePulse = true;
-                    setTimeout(() => { metronomePulse = false; }, 100);
-                }, interval);
-            }
 
             let startTime = 0;
             function animate(timestamp) {
@@ -587,8 +627,7 @@ const App: React.FC = () => {
                 const glowColor = settings.bgLightness < 50 ? 'rgba(203, 213, 225, 0.2)' : 'rgba(0, 0, 0, 0.2)';
                 const blurRadius = (settings.glowSize / 100) * 150;
                 const baseSpread = (settings.glowSize / 100) * 20;
-                const pulseSpread = (settings.glowSize / 100) * 40;
-                const spreadRadius = metronomePulse ? pulseSpread : baseSpread;
+                const spreadRadius = baseSpread;
                 glowElement.style.cssText = \`width: \${baseSize}px; height: \${baseSize}px; box-shadow: 0 0 \${blurRadius}px \${spreadRadius}px \${glowColor}; border-radius: 50%; position: absolute; opacity: \${settings.glowSize > 0 ? 1 : 0}; transition: opacity 0.3s, box-shadow 0.1s; transform: scale(\${currentScale});\`;
                 requestAnimationFrame(animate);
             }
@@ -608,7 +647,7 @@ const App: React.FC = () => {
     URL.revokeObjectURL(url);
   };
   
-  const handleSettingChange = (key: keyof Settings, value: string | number | boolean) => {
+  const handleSettingChange = (key: keyof Settings, value: any) => {
     // Special handling for metronome enabling to deal with AudioContext policies
     if (key === 'metronomeEnabled') {
       if (value === true) {
@@ -624,7 +663,7 @@ const App: React.FC = () => {
             setSettings(prev => ({ ...prev, metronomeEnabled: true }));
           } catch (error) {
             console.error("Failed to initialize or resume AudioContext:", error);
-            // Optionally, provide feedback to the user that audio could not be started
+            alert("Could not start audio. Please interact with the page and try again.");
           }
         };
         initializeAndStart();
@@ -636,7 +675,7 @@ const App: React.FC = () => {
       return;
     }
 
-    setSettings(prev => ({ ...prev, [key]: value as any }));
+    setSettings(prev => ({ ...prev, [key]: value }));
     setSelectedPreset(''); // Deselect preset when a manual change is made
   };
 
@@ -723,6 +762,33 @@ const App: React.FC = () => {
       }
       setTouchStartX(null);
   };
+  
+  const cycleAccent = (currentAccent: AccentType): AccentType => {
+      const cycle: AccentType[] = ['standard', 'accent1', 'accent2', 'skip'];
+      const currentIndex = cycle.indexOf(currentAccent);
+      const nextIndex = (currentIndex + 1) % cycle.length;
+      return cycle[nextIndex];
+  };
+
+  const handleAccentChange = (index: number) => {
+    const newPattern = [...settings.accentPattern];
+    newPattern[index] = cycleAccent(newPattern[index]);
+    handleSettingChange('accentPattern', newPattern);
+  };
+
+  const handleBeatsPerMeasureChange = (newBeats: number) => {
+    const safeBeats = Math.max(1, Math.min(16, newBeats));
+    const oldPattern = settings.accentPattern;
+    const newPattern: AccentType[] = [];
+    for (let i = 0; i < safeBeats; i++) {
+        newPattern.push(oldPattern[i] || (i === 0 ? 'accent1' : 'standard'));
+    }
+    if (newPattern.length > 0 && !newPattern.includes('accent1')) {
+        newPattern[0] = 'accent1';
+    }
+    setSettings(prev => ({ ...prev, beatsPerMeasure: safeBeats, accentPattern: newPattern }));
+    setSelectedPreset('');
+  };
 
 
   const baseSize = (maxBreathPercent / 100) * Math.min(viewportSize.width, viewportSize.height) * 0.9;
@@ -736,8 +802,7 @@ const App: React.FC = () => {
   const blurRadius = (glowSize / 100) * 150;
   
   const baseSpreadRadius = (glowSize / 100) * 20;
-  const pulseSpreadRadius = (glowSize / 100) * 40;
-  const spreadRadius = metronomeVisualPulse ? pulseSpreadRadius : baseSpreadRadius;
+  const spreadRadius = baseSpreadRadius;
 
   const glowStyle = {
     width: `${baseSize}px`,
@@ -984,50 +1049,67 @@ const App: React.FC = () => {
               
               <div className={`p-4 rounded-lg bg-slate-100 dark:bg-slate-900/50 transition-opacity ${metronomeEnabled ? 'opacity-100' : 'opacity-50 pointer-events-none'}`}>
                 <div className="space-y-4">
-                  <div>
-                      <label className="block text-sm font-medium text-center text-slate-700 dark:text-slate-300 mb-2">
-                        Beats Per Minute
-                      </label>
-                      <div className="flex items-center gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Accent Pattern</label>
+                      <div className="grid grid-cols-8 gap-1.5">
+                        {accentPattern.map((accent, index) => (
                           <button
-                            onClick={() => handleSettingChange('metronomeBPM', Math.max(40, metronomeBPM - 1))}
+                            key={index}
+                            onClick={() => handleAccentChange(index)}
+                            className={`w-full aspect-square rounded-md text-white text-xs font-bold transition-all duration-100 border-2 ${ACCENT_CONFIG[accent].color} ${currentBeat === index ? 'ring-2 ring-offset-2 ring-offset-slate-100 dark:ring-offset-slate-800 ring-blue-500 ' + ACCENT_CONFIG[accent].borderColor : 'border-transparent'}`}
+                            title={ACCENT_CONFIG[accent].label}
+                            aria-label={`Beat ${index + 1}: ${ACCENT_CONFIG[accent].label}. Click to change.`}
                             disabled={!metronomeEnabled}
-                            className="px-2 py-1 rounded-md bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"
                           >
-                            -
+                          {index + 1}
                           </button>
-                          <div className="flex-grow text-center text-lg font-mono px-2 py-1 bg-slate-200 dark:bg-slate-800 rounded-md">
-                            {metronomeBPM}
-                          </div>
-                          <button
-                             onClick={() => handleSettingChange('metronomeBPM', Math.min(200, metronomeBPM + 1))}
-                            disabled={!metronomeEnabled}
-                            className="px-2 py-1 rounded-md bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 dark:hover:bg-slate-600 transition-colors"
-                          >
-                            +
-                          </button>
+                        ))}
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="beats-per-measure" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Beats
+                            </label>
+                            <select
+                                id="beats-per-measure"
+                                value={beatsPerMeasure}
+                                onChange={(e) => handleBeatsPerMeasureChange(Number(e.target.value))}
+                                className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                                disabled={!metronomeEnabled}
+                            >
+                                {[...Array(15)].map((_, i) => <option key={i+2} value={i+2}>{i+2}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                                Sound Kit
+                            </label>
+                            <select
+                                id="metronome-sound"
+                                value={metronomeSoundKit}
+                                onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as 'click' | 'beep' | 'drum')}
+                                className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
+                                disabled={!metronomeEnabled}
+                            >
+                                <option value="click">Click</option>
+                                <option value="beep">Beep</option>
+                                <option value="drum">Drum Kit</option>
+                            </select>
+                        </div>
+                    </div>
+                  
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        BPM ({metronomeBPM})
+                      </label>
                       <input
-                        type="range" min="40" max="200" value={metronomeBPM}
+                        type="range" min="30" max="240" value={metronomeBPM}
                         onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
-                        className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer mt-3"
+                        className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                         disabled={!metronomeEnabled}
                       />
-                  </div>
-                  <div>
-                    <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                        Sound
-                    </label>
-                    <select
-                        id="metronome-sound"
-                        value={metronomeSound}
-                        onChange={(e) => handleSettingChange('metronomeSound', e.target.value as 'click' | 'beep')}
-                        className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
-                        disabled={!metronomeEnabled}
-                    >
-                        <option value="click">Click</option>
-                        <option value="beep">Beep</option>
-                    </select>
                   </div>
                 </div>
               </div>
@@ -1081,7 +1163,7 @@ const App: React.FC = () => {
                         className="flex-grow min-w-0 px-3 py-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
                         aria-label="Load a preset"
                       >
-                        <option value="" disabled>Select a preset...</option>
+                        <option value="">Select a preset...</option>
                         {defaultPresets.map(p => <option key={p.name} value={`default:${p.name}`}>{p.name}</option>)}
                         {customPresets.length > 0 && (
                           <optgroup label="My Presets">
