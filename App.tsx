@@ -1,5 +1,19 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+// --- SVG Icon Components ---
+const FullscreenEnterIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg width="24px" height="24px" viewBox="0 0 16 16" className={className} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path fillRule="evenodd" d="M5.828 10.172a.5.5 0 0 0-.707 0l-4.096 4.096V11.5a.5.5 0 0 0-1 0v3.975a.5.5 0 0 0 .5.5H4.5a.5.5 0 0 0 0-1H1.732l4.096-4.096a.5.5 0 0 0 0-.707zm4.344 0a.5.5 0 0 1 .707 0l4.096 4.096V11.5a.5.5 0 1 1 1 0v3.975a.5.5 0 0 1-.5.5H11.5a.5.5 0 0 1 0-1h2.768l-4.096-4.096a.5.5 0 0 1 0-.707zm0-4.344a.5.5 0 0 0 .707 0l4.096-4.096V4.5a.5.5 0 1 0 1 0V.525a.5.5 0 0 0-.5-.5H11.5a.5.5 0 0 0 0 1h2.768l-4.096 4.096a.5.5 0 0 0 0 .707zm-4.344 0a.5.5 0 0 1-.707 0L1.025 1.732V4.5a.5.5 0 0 1-1 0V.525a.5.5 0 0 1 .5-.5H4.5a.5.5 0 0 1 0 1H1.732l4.096 4.096a.5.5 0 0 1 0 .707z"/>
+    </svg>
+);
+
+const FullscreenExitIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg width="24px" height="24px" viewBox="0 0 1024 1024" className={className} fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+      <path d="M391 240.9c-.8-6.6-8.9-9.4-13.6-4.7l-43.7 43.7L200 146.3a8.03 8.03 0 0 0-11.3 0l-42.4 42.3a8.03 8.03 0 0 0 0 11.3L280 333.6l-43.9 43.9a8.01 8.01 0 0 0 4.7 13.6L401 410c5.1.6 9.5-3.7 8.9-8.9L391 240.9zm10.1 373.2L240.8 633c-6.6.8-9.4 8.9-4.7 13.6l43.9 43.9L146.3 824a8.03 8.03 0 0 0 0 11.3l42.4 42.3c3.1 3.1 8.2 3.1 11.3 0L333.7 744l43.7 43.7A8.01 8.01 0 0 0 391 783l18.9-160.1c.6-5.1-3.7-9.4-8.8-8.8zm221.8-204.2L783.2 391c6.6-.8 9.4-8.9 4.7-13.6L744 333.6 877.7 200c3.1-3.1 3.1-8.2 0-11.3l-42.4-42.3a8.03 8.03 0 0 0-11.3 0L690.3 279.9l-43.7-43.7a8.01 8.01 0 0 0-13.6 4.7L614.1 401c-.6 5.2 3.7 9.5 8.8 8.9zM744 690.4l43.9-43.9a8.01 8.01 0 0 0-4.7-13.6L623 614c-5.1-.6-9.5 3.7-8.9 8.9L633 783.1c.8 6.6 8.9 9.4 13.6 4.7l43.7-43.7L824 877.7c3.1 3.1 8.2 3.1 11.3 0l42.4-42.3c3.1-3.1 3.1-8.2 0-11.3L744 690.4z"/>
+    </svg>
+);
+
+
 // --- Color Utility Functions ---
 const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -25,6 +39,7 @@ const lerpColor = (colorA: string, colorB: string, amount: number): string => {
   const rgbB = hexToRgb(colorB);
   if (!rgbA || !rgbB) return colorA;
 
+  // Corrected color interpolation
   const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
   const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
   const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
@@ -161,6 +176,7 @@ interface Settings {
   panelBlur: number;
   syncBreathWithMetronome: boolean;
   syncMultiplier: number;
+  asymmetricBreathing: boolean;
   // Speed Trainer Settings
   speedTrainerEnabled: boolean;
   startBPM: number;
@@ -205,6 +221,7 @@ const initialSettings: Settings = {
   panelBlur: 10,
   syncBreathWithMetronome: false,
   syncMultiplier: 2,
+  asymmetricBreathing: false,
   speedTrainerEnabled: false,
   startBPM: 60,
   targetBPM: 120,
@@ -483,7 +500,7 @@ const App: React.FC = () => {
     eyeColorSpeed, bgLightness, bgWarmth, glowSize,
     metronomeEnabled, metronomeBPM, metronomeSoundKit,
     beatsPerMeasure, accentPattern, panelOpacity, panelBlur,
-    syncBreathWithMetronome, syncMultiplier,
+    syncBreathWithMetronome, syncMultiplier, asymmetricBreathing,
     speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures,
     showMetronomeControl
   } = settings;
@@ -825,18 +842,6 @@ const App: React.FC = () => {
     speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures
   ]);
 
-  // Sync Breath Speed with Metronome
-  useEffect(() => {
-    if (syncBreathWithMetronome) {
-        const bpmForSync = speedTrainerEnabled ? currentDynamicBPM : metronomeBPM;
-        const measureDurationSeconds = (60 / bpmForSync) * beatsPerMeasure;
-        const newBreathSpeed = measureDurationSeconds * syncMultiplier;
-        if (Math.abs(settings.breathSpeed - newBreathSpeed) > 0.01) {
-            setSettings(prev => ({ ...prev, breathSpeed: parseFloat(newBreathSpeed.toFixed(2)) }));
-        }
-    }
-  }, [metronomeBPM, currentDynamicBPM, beatsPerMeasure, syncBreathWithMetronome, syncMultiplier, speedTrainerEnabled, settings.breathSpeed]);
-
   useEffect(() => {
     const handleResize = () => {
       setViewportSize({width: window.innerWidth, height: window.innerHeight});
@@ -852,13 +857,13 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleRestart = () => {
+  const handleRestart = useCallback(() => {
     animationKeyRef.current += 1; // Use ref to trigger restart
     lastTimestampRef.current = null;
     breathPhaseRef.current = 0;
     curvePhaseRef.current = 0;
     colorPhaseRef.current = 0;
-  };
+  }, []);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -875,22 +880,49 @@ const App: React.FC = () => {
       const deltaTime = timestamp - lastTimestampRef.current;
       lastTimestampRef.current = timestamp;
 
-      // Update phases based on delta time and current speed settings
-      // This allows for smooth speed changes without resetting the animation
-      if (breathSpeed > 0) {
-        breathPhaseRef.current = (breathPhaseRef.current + deltaTime / (breathSpeed * 1000)) % 1;
+      // --- Breath Animation ---
+      const bpmForSync = speedTrainerEnabled ? currentDynamicBPM : metronomeBPM;
+      const measureDurationMs = (60 / bpmForSync) * beatsPerMeasure * 1000;
+      
+      const breathCycleDurationMs = syncBreathWithMetronome
+        ? measureDurationMs * syncMultiplier
+        : breathSpeed * 1000;
+
+      if (breathCycleDurationMs > 0) {
+          breathPhaseRef.current = (breathPhaseRef.current + deltaTime / breathCycleDurationMs) % 1;
       }
+      
+      let breathEasedValue;
+      if (syncBreathWithMetronome && asymmetricBreathing) {
+        // 2:1 ratio: 2/3 for inhale, 1/3 for exhale
+        const phase = breathPhaseRef.current;
+        const inhaleDuration = 2 / 3;
+        
+        if (phase < inhaleDuration) {
+          // Inhale part
+          const inhaleProgress = phase / inhaleDuration;
+          breathEasedValue = (1 - Math.cos(inhaleProgress * Math.PI)) / 2; // Goes from 0 to 1
+        } else {
+          // Exhale part
+          const exhaleProgress = (phase - inhaleDuration) / (1 - inhaleDuration);
+          breathEasedValue = (1 + Math.cos(exhaleProgress * Math.PI)) / 2; // Goes from 1 to 0
+        }
+      } else {
+        // Standard symmetric breathing
+        breathEasedValue = (1 - Math.cos(breathPhaseRef.current * 2 * Math.PI)) / 2;
+      }
+
+      const minScale = minBreathPercent / maxBreathPercent;
+      const currentScale = lerp(minScale, 1.0, breathEasedValue);
+      setAnimatedScale(currentScale);
+
+      // --- Other independent animations ---
       if (curveSpeed > 0) {
         curvePhaseRef.current = (curvePhaseRef.current + deltaTime / (curveSpeed * 1000)) % 1;
       }
       if (eyeColorSpeed > 0) {
         colorPhaseRef.current = (colorPhaseRef.current + deltaTime / (eyeColorSpeed * 1000)) % 1;
       }
-      
-      const minScale = minBreathPercent / maxBreathPercent;
-      const breathEasedValue = (1 - Math.cos(breathPhaseRef.current * 2 * Math.PI)) / 2;
-      const currentScale = lerp(minScale, 1.0, breathEasedValue);
-      setAnimatedScale(currentScale);
 
       const curveEasedValue = Math.pow(Math.sin(curvePhaseRef.current * Math.PI), 4);
       const curveRange = maxCurveRadius - 25;
@@ -900,7 +932,8 @@ const App: React.FC = () => {
       const easedColorValue = (1 - Math.cos(colorPhaseRef.current * 2 * Math.PI)) / 2;
       const inversionAmount = eyeColorInversion / 100;
       const colorInversionFactor = easedColorValue * inversionAmount;
-
+      
+      // Corrected color inversion logic for both eyes
       const darkEyeColor = lerpColor(COLORS.dark, COLORS.light, colorInversionFactor);
       const lightEyeColor = lerpColor(COLORS.light, COLORS.dark, colorInversionFactor);
 
@@ -913,10 +946,7 @@ const App: React.FC = () => {
     animationFrameId = requestAnimationFrame(animate);
     
     return () => cancelAnimationFrame(animationFrameId);
-  }, [
-      minBreathPercent, maxBreathPercent, maxCurveRadius, eyeColorInversion, 
-      breathSpeed, curveSpeed, eyeColorSpeed // Keep speeds here to update phase calculation
-  ]);
+  }, [settings, currentDynamicBPM]);
 
 
   useEffect(() => {
@@ -929,8 +959,6 @@ const App: React.FC = () => {
     // Force text color update for panel
     const panel = panelRef.current;
     if (panel) {
-        // This is a bit of a hack, but ensures reactivity in environments where CSS might lag
-        // or where class-based theme switching has issues (like on iOS Safari sometimes).
         const textColor = isDark ? '#e2e8f0' : '#334155'; // slate-200 or slate-700
         panel.style.color = textColor;
     }
@@ -1039,7 +1067,7 @@ const App: React.FC = () => {
                 const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
                 const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
                 const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
-                const lightEyeColor = lerpColor('#ffffff', '#dark', colorInversionFactor);
+                const lightEyeColor = lerpColor('#ffffff', '#000000', colorInversionFactor);
                 const pulsePeriod = settings.pulseSpeed * 1000;
                 const minEyeScale = settings.minRadius / settings.maxRadius;
                 const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
@@ -1083,27 +1111,19 @@ const App: React.FC = () => {
   };
   
   const handleSettingChange = (key: keyof Settings, value: any) => {
-    if (key === 'metronomeEnabled') {
-      handleRestart();
-      setSettings(prev => ({ ...prev, metronomeEnabled: value }));
-      setSelectedPreset('');
-      return;
+    // When changing a setting that affects breath speed, disable asymmetric breathing
+    // unless the change is to asymmetricBreathing itself.
+    if (key !== 'asymmetricBreathing' && (key === 'syncBreathWithMetronome' && value === false)) {
+        setSettings(prev => ({ ...prev, [key]: value, asymmetricBreathing: false }));
+    } else {
+        setSettings(prev => ({ ...prev, [key]: value }));
     }
-
-    if (key === 'breathSpeed' && settings.syncBreathWithMetronome) {
-        setSettings(prev => ({ ...prev, breathSpeed: value, syncBreathWithMetronome: false }));
-        setSelectedPreset('');
-        return;
-    }
-
-    setSettings(prev => ({ ...prev, [key]: value }));
     setSelectedPreset('');
   };
   
   const handleMetronomeToggle = async () => {
     if (!audioCtxRef.current) {
         try {
-            // Use a specific sample rate if needed, but default is usually fine
             audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         } catch (error) {
             console.error("Failed to create AudioContext:", error);
@@ -1111,16 +1131,18 @@ const App: React.FC = () => {
             return;
         }
     }
-    // Always try to resume, as it's required after any user gesture on most browsers
     if (audioCtxRef.current.state === 'suspended') {
         try {
             await audioCtxRef.current.resume();
         } catch (error) {
             console.error("Failed to resume AudioContext:", error);
-            // This might fail if not triggered by a direct user gesture.
-            // The UI will still update, but sound won't play until another interaction.
         }
     }
+
+    if (!metronomeEnabled) {
+      handleRestart();
+    }
+    
     handleSettingChange('metronomeEnabled', !metronomeEnabled);
 };
 
@@ -1196,8 +1218,6 @@ const App: React.FC = () => {
   };
   
   const handleTouchStart = (e: React.TouchEvent) => {
-      // Only initiate swipe-to-close if the touch starts on the panel itself,
-      // not on interactive elements inside it like buttons or inputs.
       if (panelRef.current && e.target === panelRef.current) {
           setTouchStartY(e.targetTouches[0].clientY);
       }
@@ -1207,7 +1227,6 @@ const App: React.FC = () => {
       if (touchStartY === null) return;
       const touchEndY = e.changedTouches[0].clientY;
       const deltaY = touchEndY - touchStartY;
-      // Check for a downward swipe of sufficient distance
       if (deltaY > 50) {
           setIsPanelOpen(false);
       }
@@ -1418,7 +1437,6 @@ const App: React.FC = () => {
               <div className="mb-4">
                 <label className={`block text-sm font-medium ${secondaryTextColor}`}>
                     Breath Speed ({breathSpeed}s)
-                    {syncBreathWithMetronome && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Synced)</span>}
                 </label>
                 <input
                   type="range" min="1" max="180" value={breathSpeed}
@@ -1690,34 +1708,46 @@ const App: React.FC = () => {
 
                 <hr className={borderColor} />
                 
-                <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-2">
-                    <label className="flex items-center space-x-3 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={syncBreathWithMetronome}
-                            onChange={(e) => handleSettingChange('syncBreathWithMetronome', e.target.checked)}
-                            className="h-5 w-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-blue-600"
-                        />
-                        <span className={`font-medium ${textColor}`}>
-                            Sync with Breath Speed
-                        </span>
-                    </label>
-
-                    {syncBreathWithMetronome && (
-                    <div className="flex items-center gap-2">
-                        <label htmlFor="sync-multiplier" className={`font-medium ${textColor}`}>
-                            X
+                <div className={`p-4 rounded-xl space-y-3 ${syncBreathWithMetronome ? 'bg-slate-500/10' : ''} transition-colors`}>
+                    {/* Main Sync Row */}
+                    <div className="flex items-center justify-between">
+                        <label className="flex items-center space-x-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={syncBreathWithMetronome}
+                                onChange={(e) => handleSettingChange('syncBreathWithMetronome', e.target.checked)}
+                                className="h-5 w-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-blue-600"
+                            />
+                            <span className={`font-medium ${textColor}`}>
+                                Breath Sync
+                            </span>
                         </label>
-                        <select
-                            id="sync-multiplier"
-                            value={syncMultiplier}
-                            onChange={(e) => handleSettingChange('syncMultiplier', Number(e.target.value))}
-                            className={`w-20 px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
-                        >
-                            {[...Array(8)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
-                        </select>
+
+                        <div className={`flex items-center gap-2 transition-opacity duration-300 ${syncBreathWithMetronome ? 'opacity-100' : 'opacity-0'}`}>
+                            <label htmlFor="sync-multiplier" className={`font-medium ${textColor}`}>
+                                X
+                            </label>
+                            <select
+                                id="sync-multiplier"
+                                value={syncMultiplier}
+                                onChange={(e) => handleSettingChange('syncMultiplier', Number(e.target.value))}
+                                className={`w-20 px-3 py-2 ${selectBg} border ${selectBorder} rounded-md text-base focus:ring-2 focus:ring-blue-500 focus:outline-none appearance-none`}
+                            >
+                                {[...Array(8)].map((_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
+                            </select>
+                        </div>
                     </div>
-                    )}
+                    
+                    {/* Asymmetric Row - with slide-down animation */}
+                    <div className={`transition-all duration-300 ease-in-out overflow-hidden ${syncBreathWithMetronome ? 'max-h-12 pt-3' : 'max-h-0 pt-0'}`}>
+                        <div className="flex items-center justify-between">
+                            <label className={`font-medium ${textColor}`}>Asymmetric Rhythm (2:1)</label>
+                            <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" checked={asymmetricBreathing} onChange={(e) => handleSettingChange('asymmetricBreathing', e.target.checked)} className="sr-only peer" disabled={!syncBreathWithMetronome} />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600 peer-disabled:opacity-50 peer-disabled:cursor-not-allowed"></div>
+                            </label>
+                        </div>
+                    </div>
                 </div>
               </div>
             </div>
@@ -1865,18 +1895,13 @@ const App: React.FC = () => {
             </button>
             <button
                 onClick={toggleFullscreen}
-                className="p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70"
+                className="p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70 text-slate-800 dark:text-slate-200"
                 aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
             >
-                {isFullscreen ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M15.707 15.707a1 1 0 01-1.414 0L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 011.414-1.414L10 8.586l4.293-4.293a1 1 0 011.414 1.414L11.414 10l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
-                    </svg>
-                ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M4.5 2.5a.5.5 0 00-.5.5v3a.5.5 0 001 0V3h3a.5.5 0 000-1H4.5zM15.5 2.5a.5.5 0 00-.5.5V6a.5.5 0 001 0V3h-3a.5.5 0 000 1h3.5zM4.5 17.5a.5.5 0 00.5-.5V14a.5.5 0 00-1 0v3H2a.5.5 0 000 1h2.5zM15.5 17.5a.5.5 0 00.5-.5V14a.5.5 0 00-1 0v3h-3a.5.5 0 000 1h3.5z" clipRule="evenodd" />
-                    </svg>
-                )}
+              {isFullscreen 
+                ? <FullscreenExitIcon className="w-6 h-6" />
+                : <FullscreenEnterIcon className="w-6 h-6" />
+              }
             </button>
         </div>
       )}
