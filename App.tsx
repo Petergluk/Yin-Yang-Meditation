@@ -152,7 +152,7 @@ interface Settings {
   glowSize: number;
   metronomeEnabled: boolean;
   metronomeBPM: number;
-  metronomeSoundKit: 'click' | 'beep' | 'drum';
+  metronomeSoundKit: 'click' | 'beep' | 'drum' | 'jazz' | 'drops';
   beatsPerMeasure: number;
   accentPattern: AccentType[];
 }
@@ -392,6 +392,89 @@ const App: React.FC = () => {
                     oscillator.start(time);
                     oscillator.stop(time + 0.15);
                 }
+                break;
+            }
+            case 'jazz': {
+                const playRide = () => {
+                    const bufferSize = audioCtx.sampleRate * 0.5;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                    
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    const bqFilter = audioCtx.createBiquadFilter();
+                    bqFilter.type = 'highpass';
+                    bqFilter.frequency.value = 5000;
+                    
+                    const gainNode = audioCtx.createGain();
+                    source.connect(bqFilter).connect(gainNode).connect(audioCtx.destination);
+                    
+                    gainNode.gain.setValueAtTime(0.15, time);
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.4);
+                    source.start(time);
+                };
+            
+                const playKick = () => {
+                    const oscillator = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+                    oscillator.connect(gainNode).connect(audioCtx.destination);
+                    oscillator.frequency.setValueAtTime(150, time);
+                    oscillator.frequency.exponentialRampToValueAtTime(0.01, time + 0.1);
+                    gainNode.gain.setValueAtTime(0.6, time);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+                    oscillator.start(time);
+                    oscillator.stop(time + 0.15);
+                };
+            
+                const playSnare = () => {
+                    const bufferSize = audioCtx.sampleRate * 0.2;
+                    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                    const output = buffer.getChannelData(0);
+                    for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
+                    
+                    const source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    const gainNode = audioCtx.createGain();
+                    source.connect(gainNode).connect(audioCtx.destination);
+                    gainNode.gain.setValueAtTime(0.1, time);
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.1);
+                    source.start(time);
+                };
+            
+                playRide();
+                if (accent === 'accent1') {
+                    playKick();
+                } else if (accent === 'accent2') {
+                    playSnare();
+                }
+                break;
+            }
+            case 'drops': {
+                const freq = accent === 'accent1' ? 900 : accent === 'accent2' ? 1100 : 1000;
+                const gain = accent === 'accent1' ? 0.4 : accent === 'accent2' ? 0.3 : 0.35;
+                const decay = accent === 'accent1' ? 0.2 : 0.15;
+            
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                const filter = audioCtx.createBiquadFilter();
+                
+                oscillator.connect(filter);
+                filter.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                oscillator.type = 'sine';
+                filter.type = 'lowpass';
+                filter.frequency.value = freq + 200;
+            
+                gainNode.gain.setValueAtTime(gain, time);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
+                
+                oscillator.frequency.setValueAtTime(freq, time);
+                oscillator.frequency.exponentialRampToValueAtTime(freq * 0.5, time + decay * 0.8);
+            
+                oscillator.start(time);
+                oscillator.stop(time + decay);
                 break;
             }
             case 'click':
@@ -1051,7 +1134,7 @@ const App: React.FC = () => {
                 <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Accent Pattern</label>
-                      <div className="grid grid-cols-8 gap-1.5">
+                      <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
                         {accentPattern.map((accent, index) => (
                           <button
                             key={index}
@@ -1089,13 +1172,15 @@ const App: React.FC = () => {
                             <select
                                 id="metronome-sound"
                                 value={metronomeSoundKit}
-                                onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as 'click' | 'beep' | 'drum')}
+                                onChange={(e) => handleSettingChange('metronomeSoundKit', e.target.value as 'click' | 'beep' | 'drum' | 'jazz' | 'drops')}
                                 className="w-full px-3 py-1.5 bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md text-sm focus:ring-2 focus:ring-slate-500 focus:outline-none"
                                 disabled={!metronomeEnabled}
                             >
                                 <option value="click">Click</option>
                                 <option value="beep">Beep</option>
                                 <option value="drum">Drum Kit</option>
+                                <option value="jazz">Jazz Drums</option>
+                                <option value="drops">Water Drops</option>
                             </select>
                         </div>
                     </div>
@@ -1105,7 +1190,7 @@ const App: React.FC = () => {
                         BPM ({metronomeBPM})
                       </label>
                       <input
-                        type="range" min="30" max="240" value={metronomeBPM}
+                        type="range" min="20" max="400" value={metronomeBPM}
                         onChange={(e) => handleSettingChange('metronomeBPM', Number(e.target.value))}
                         className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
                         disabled={!metronomeEnabled}
