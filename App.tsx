@@ -25,7 +25,7 @@ const lerpColor = (colorA: string, colorB: string, amount: number): string => {
   const rgbB = hexToRgb(colorB);
   if (!rgbA || !rgbB) return colorA;
 
-  const r = Math.round(lerp(rgbA.r, rgbA.r, amount));
+  const r = Math.round(lerp(rgbA.r, rgbB.r, amount));
   const g = Math.round(lerp(rgbA.g, rgbB.g, amount));
   const b = Math.round(lerp(rgbA.b, rgbB.b, amount));
 
@@ -131,7 +131,7 @@ const ACCENT_CONFIG: Record<AccentType, { color: string; ringColor: string; labe
   accent2: { color: 'bg-yellow-500/80', ringColor: 'ring-yellow-400', label: 'Accent 2' },
 };
 
-type MetronomeSoundKit = 'click' | 'beep' | 'drum' | 'jazz' | 'drops' | 'marimba' | 'jazz_ride';
+type MetronomeSoundKit = 'click' | 'beep' | 'drum' | 'jazz' | 'percussion' | 'marimba' | 'rock_drums';
 
 
 interface Settings {
@@ -168,9 +168,7 @@ interface Settings {
   increaseBy: number;
   everyNMeasures: number;
   // Interface Settings
-  showMetronomeStart: boolean;
-  showCurrentBPM: boolean;
-  showSpeedTrainerProgress: boolean;
+  showMetronomeControl: boolean;
 }
 
 interface Preset {
@@ -212,9 +210,7 @@ const initialSettings: Settings = {
   targetBPM: 120,
   increaseBy: 5,
   everyNMeasures: 2,
-  showMetronomeStart: true,
-  showCurrentBPM: true,
-  showSpeedTrainerProgress: true,
+  showMetronomeControl: true,
 };
 
 const defaultPresets: Preset[] = [
@@ -404,7 +400,7 @@ const NumberInput: React.FC<{
 
     return (
         <div className="space-y-1">
-            <label htmlFor={`input-${label}`} className="block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+            <label htmlFor={`input-${label}`} className="block text-sm font-medium text-slate-700 dark:text-slate-200">{label}</label>
             <div className="flex items-center justify-between p-1 bg-slate-200 dark:bg-slate-700 rounded-lg">
                 <button 
                     onMouseDown={() => startCounter(false)} 
@@ -424,7 +420,7 @@ const NumberInput: React.FC<{
                     onChange={handleInputChange}
                     onBlur={handleInputBlur}
                     onKeyDown={handleInputKeyDown}
-                    className="w-16 text-center text-lg font-mono font-semibold text-slate-800 dark:text-slate-200 bg-transparent border-none focus:ring-0 p-0"
+                    className="w-16 text-center text-lg font-mono font-semibold text-slate-800 dark:text-slate-100 bg-transparent border-none focus:ring-0 p-0"
                 />
                 <button 
                     onMouseDown={() => startCounter(true)} 
@@ -481,7 +477,7 @@ const App: React.FC = () => {
     beatsPerMeasure, accentPattern, panelOpacity, panelBlur,
     syncBreathWithMetronome, syncMultiplier,
     speedTrainerEnabled, startBPM, targetBPM, increaseBy, everyNMeasures,
-    showMetronomeStart, showCurrentBPM, showSpeedTrainerProgress
+    showMetronomeControl
   } = settings;
 
   useEffect(() => {
@@ -508,10 +504,10 @@ const App: React.FC = () => {
     switch (metronomeSoundKit) {
         case 'marimba': {
             const baseFreq = 261.63; // C4
-            const scale = [0, 4, 7]; // Major triad intervals (in semitones)
+            const fifths = [0, 7, 2, 9]; // C, G, D, A (in semitones, wrapped)
             const semitone = Math.pow(2, 1 / 12);
-            const noteIndex = beatIndex % 3;
-            const freq = baseFreq * Math.pow(semitone, scale[noteIndex]);
+            const noteIndex = beatIndex % 4;
+            const freq = baseFreq * Math.pow(semitone, fifths[noteIndex]);
 
             const osc = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
@@ -520,74 +516,69 @@ const App: React.FC = () => {
 
             osc.type = 'sine';
             osc.frequency.setValueAtTime(freq, time);
-
-            const osc2 = audioCtx.createOscillator();
-            osc2.connect(gainNode);
-            osc2.type = 'sine';
-            osc2.frequency.setValueAtTime(freq * 2.01, time); 
-
+            
             gainNode.gain.setValueAtTime(0, time);
-            gainNode.gain.linearRampToValueAtTime(0.4, time + 0.01);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.8);
+            gainNode.gain.linearRampToValueAtTime(0.5, time + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.15); // Shorter, duller decay
 
             osc.start(time);
-            osc2.start(time);
-            osc.stop(time + 1);
-            osc2.stop(time + 1);
+            osc.stop(time + 0.2);
             break;
         }
-        case 'jazz_ride': {
-             const playRide = () => {
-                const bufferSize = audioCtx.sampleRate * 0.5;
+        case 'rock_drums': {
+            if (accent === 'accent1') { // Kick
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.frequency.setValueAtTime(120, time);
+                osc.frequency.exponentialRampToValueAtTime(40, time + 0.15);
+                gain.gain.setValueAtTime(1, time);
+                gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+                osc.start(time);
+                osc.stop(time + 0.2);
+            } else if (accent === 'accent2') { // Snare
+                const bufferSize = audioCtx.sampleRate * 0.2;
                 const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                const output = buffer.getChannelData(0);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                
+                const noise = audioCtx.createBufferSource();
+                noise.buffer = buffer;
+                const noiseGain = audioCtx.createGain();
+                noiseGain.gain.setValueAtTime(0.4, time);
+                noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
 
-                const freqs = [220, 550, 880, 1320, 1600, 2400, 3200, 4800, 6000];
-                const decays = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45];
-                const amps = [0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1, 0.05];
+                const osc = audioCtx.createOscillator();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(200, time);
+                const oscGain = audioCtx.createGain();
+                oscGain.gain.setValueAtTime(0.3, time);
+                oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
 
-                for (let i = 0; i < bufferSize; i++) {
-                    let value = 0;
-                    const t = i / audioCtx.sampleRate;
-                    for (let j = 0; j < freqs.length; j++) {
-                        value += amps[j] * Math.sin(2 * Math.PI * freqs[j] * t) * Math.exp(-t / decays[j]);
-                    }
-                    output[i] = value * 0.5;
-                }
-                 for (let i = 0; i < bufferSize; i++) {
-                    output[i] += (Math.random() * 2 - 1) * 0.01;
-                }
-
+                noise.connect(noiseGain).connect(audioCtx.destination);
+                osc.connect(oscGain).connect(audioCtx.destination);
+                noise.start(time);
+                osc.start(time);
+                noise.stop(time + 0.2);
+                osc.stop(time + 0.2);
+            } else { // Hi-hat
+                const bufferSize = audioCtx.sampleRate * 0.1;
+                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+                
                 const source = audioCtx.createBufferSource();
                 source.buffer = buffer;
-                const highpass = audioCtx.createBiquadFilter();
-                highpass.type = 'highpass';
-                highpass.frequency.value = 400;
-
-                const gainNode = audioCtx.createGain();
-                source.connect(highpass).connect(gainNode).connect(audioCtx.destination);
-                gainNode.gain.setValueAtTime(0.3, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.4);
+                const filter = audioCtx.createBiquadFilter();
+                filter.type = 'highpass';
+                filter.frequency.value = 8000;
+                const gain = audioCtx.createGain();
+                
+                source.connect(filter).connect(gain).connect(audioCtx.destination);
+                gain.gain.setValueAtTime(0.15, time);
+                gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
                 source.start(time);
-            };
-            const playBrushSnare = () => {
-                 const bufferSize = audioCtx.sampleRate * 0.2;
-                const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
-                const output = buffer.getChannelData(0);
-                for (let i = 0; i < bufferSize; i++) { output[i] = Math.random() * 2 - 1; }
-                const source = audioCtx.createBufferSource();
-                source.buffer = buffer;
-                const gainNode = audioCtx.createGain();
-                source.connect(gainNode).connect(audioCtx.destination);
-                gainNode.gain.setValueAtTime(0.1, time);
-                gainNode.gain.exponentialRampToValueAtTime(0.0001, time + 0.15);
-                source.start(time);
-            };
-            
-            if (accent === 'accent2') {
-                playBrushSnare();
-            } else {
-                playRide();
             }
             break;
         }
@@ -713,26 +704,28 @@ const App: React.FC = () => {
             }
             break;
         }
-        case 'drops': {
-            const freq = accent === 'accent1' ? 600 : accent === 'accent2' ? 700 : 650;
-            const gainVal = accent === 'accent1' ? 0.4 : 0.3;
-            const decay = accent === 'accent1' ? 0.3 : 0.2;
-            
+        case 'percussion': {
             const osc = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            osc.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            
+            const gain = audioCtx.createGain();
+            osc.connect(gain).connect(audioCtx.destination);
             osc.type = 'sine';
-            
-            osc.frequency.setValueAtTime(freq * 2.5, time);
-            osc.frequency.exponentialRampToValueAtTime(freq, time + 0.05);
 
-            gainNode.gain.setValueAtTime(gainVal, time);
-            gainNode.gain.exponentialRampToValueAtTime(0.001, time + decay);
+            if (accent === 'accent1') { // Cajon Bass
+                osc.frequency.setValueAtTime(100, time);
+                gain.gain.setValueAtTime(0.8, time);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            } else if (accent === 'accent2') { // Cajon Slap
+                osc.frequency.setValueAtTime(300, time);
+                gain.gain.setValueAtTime(0.6, time);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
+            } else { // Bongo
+                osc.frequency.setValueAtTime(440, time);
+                gain.gain.setValueAtTime(0.5, time);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+            }
             
             osc.start(time);
-            osc.stop(time + decay + 0.1);
+            osc.stop(time + 0.15);
             break;
         }
         case 'click':
@@ -1270,16 +1263,16 @@ const App: React.FC = () => {
         return (
           <>
             <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-100 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     <span>Interface Settings</span>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 pt-4">
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 pt-4 custom-scrollbar">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Panel Opacity ({panelOpacity}%)
                 </label>
                 <input
@@ -1289,7 +1282,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Panel Blur ({panelBlur}px)
                 </label>
                 <input
@@ -1300,26 +1293,12 @@ const App: React.FC = () => {
               </div>
               <hr className="border-slate-200/50 dark:border-slate-700/50" />
               <div>
-                <h3 className="text-md font-semibold text-slate-800 dark:text-slate-200 mb-3">Main Screen Elements</h3>
+                <h3 className="text-md font-semibold text-slate-800 dark:text-slate-100 mb-3">Main Screen Elements</h3>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between p-2 rounded-md">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Show Metronome Button</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-200">Show Metronome Control</span>
                     <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={showMetronomeStart} onChange={(e) => handleSettingChange('showMetronomeStart', e.target.checked)} className="sr-only peer" />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between p-2 rounded-md">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Show BPM Display</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={showCurrentBPM} onChange={(e) => handleSettingChange('showCurrentBPM', e.target.checked)} className="sr-only peer" />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
-                    </label>
-                  </div>
-                  <div className="flex items-center justify-between p-2 rounded-md">
-                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Show Speed Trainer Progress</span>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" checked={showSpeedTrainerProgress} onChange={(e) => handleSettingChange('showSpeedTrainerProgress', e.target.checked)} className="sr-only peer" />
+                      <input type="checkbox" checked={showMetronomeControl} onChange={(e) => handleSettingChange('showMetronomeControl', e.target.checked)} className="sr-only peer" />
                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
@@ -1332,16 +1311,16 @@ const App: React.FC = () => {
         return (
           <>
             <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-100 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     <span>Visual Settings</span>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pr-2 -mr-4">
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4 custom-scrollbar">
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Rotation Speed ({rotationSpeed}s)
                 </label>
                 <input
@@ -1351,9 +1330,9 @@ const App: React.FC = () => {
                 />
               </div>
               <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
-                <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Main Symbol</p>
+                <p className="text-center font-semibold text-slate-700 dark:text-slate-200 mb-4">Main Symbol</p>
                 <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Border Width ({borderWidth.toFixed(1)})
                 </label>
                 <input
@@ -1363,7 +1342,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Glow Spread ({glowSize}%)
                 </label>
                 <input
@@ -1373,7 +1352,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                     Breath Speed ({breathSpeed}s)
                     {syncBreathWithMetronome && <span className="text-xs text-blue-500 dark:text-blue-400 ml-2">(Synced)</span>}
                 </label>
@@ -1385,7 +1364,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Min Breath Size ({minBreathPercent}%)
                 </label>
                 <input
@@ -1395,7 +1374,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Max Breath Size ({maxBreathPercent}%)
                 </label>
                 <input
@@ -1405,7 +1384,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Curve Speed ({curveSpeed}s)
                 </label>
                 <input
@@ -1415,7 +1394,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Max Curve Radius ({maxCurveRadius.toFixed(1)})
                 </label>
                 <input
@@ -1425,9 +1404,9 @@ const App: React.FC = () => {
                 />
               </div>
                 <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
-                <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Eyes Pulse</p>
+                <p className="text-center font-semibold text-slate-700 dark:text-slate-200 mb-4">Eyes Pulse</p>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Pulse Speed ({pulseSpeed}s)
                 </label>
                 <input
@@ -1437,7 +1416,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Min Radius ({minRadius.toFixed(1)})
                 </label>
                 <input
@@ -1447,7 +1426,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Max Radius ({maxRadius.toFixed(1)})
                 </label>
                 <input
@@ -1457,7 +1436,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Angle Offset ({eyeAngleOffset.toFixed(0)}°)
                 </label>
                 <input
@@ -1467,7 +1446,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Eye Color Inversion ({eyeColorInversion}%)
                 </label>
                 <input
@@ -1477,7 +1456,7 @@ const App: React.FC = () => {
                 />
               </div>
               <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Inversion Speed ({eyeColorSpeed}s)
                 </label>
                 <input
@@ -1494,15 +1473,15 @@ const App: React.FC = () => {
                     onChange={(e) => handleSettingChange('invertPulsePhase', e.target.checked)}
                     className="h-4 w-4 text-slate-600 bg-slate-100 border-slate-300 rounded focus:ring-slate-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-slate-600"
                   />
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     Invert Pulse Phase
                   </span>
                 </label>
               </div>
               <hr className="border-slate-200/50 dark:border-slate-700/50 my-6" />
-                <p className="text-center font-semibold text-slate-700 dark:text-slate-300 mb-4">Background</p>
+                <p className="text-center font-semibold text-slate-700 dark:text-slate-200 mb-4">Background</p>
                 <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Lightness ({bgLightness}%)
                 </label>
                 <input
@@ -1512,7 +1491,7 @@ const App: React.FC = () => {
                 />
               </div>
                 <div className="mb-4">
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                   Warmth ({bgWarmth}%)
                 </label>
                 <input
@@ -1537,14 +1516,14 @@ const App: React.FC = () => {
         return (
           <>
             <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
-                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-100 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                     <span>Metronome</span>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 flex flex-col">
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 flex flex-col custom-scrollbar">
               <button
                 onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
                 className={`w-full py-3 rounded-xl text-white text-xl font-bold transition-all duration-150 flex items-center justify-center shadow-lg
@@ -1558,7 +1537,7 @@ const App: React.FC = () => {
               
               <div className="space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Accent Pattern</label>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-3">Accent Pattern</label>
                     <div className="grid grid-cols-4 gap-3">
                       {accentPattern.map((accent, index) => (
                         <button
@@ -1578,7 +1557,7 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-2 gap-4">
                       <div>
-                          <label htmlFor="beats-per-measure" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          <label htmlFor="beats-per-measure" className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
                               Beats
                           </label>
                           <select
@@ -1591,7 +1570,7 @@ const App: React.FC = () => {
                           </select>
                       </div>
                       <div>
-                          <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                          <label htmlFor="metronome-sound" className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
                               Sound Kit
                           </label>
                           <select
@@ -1604,8 +1583,8 @@ const App: React.FC = () => {
                               <option value="beep">Beep</option>
                               <option value="drum">Drum Kit</option>
                               <option value="jazz">Jazz Drums</option>
-                              <option value="jazz_ride">Jazz Ride</option>
-                              <option value="drops">Water Drops</option>
+                              <option value="rock_drums">Rock Drums</option>
+                              <option value="percussion">Percussion</option>
                               <option value="marimba">Marimba</option>
                           </select>
                       </div>
@@ -1614,7 +1593,7 @@ const App: React.FC = () => {
                 <hr className="border-slate-200/50 dark:border-slate-700/50" />
                 
                 <div className="flex items-center justify-between">
-                    <label className="font-medium text-slate-800 dark:text-slate-200">Speed Trainer</label>
+                    <label className="font-medium text-slate-800 dark:text-slate-100">Speed Trainer</label>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" checked={speedTrainerEnabled} onChange={(e) => handleSettingChange('speedTrainerEnabled', e.target.checked)} className="sr-only peer" />
                         <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
@@ -1634,10 +1613,10 @@ const App: React.FC = () => {
                 ) : (
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                           BPM
                         </label>
-                        <span className="text-lg font-mono font-semibold text-slate-800 dark:text-slate-200">{metronomeBPM}</span>
+                        <span className="text-lg font-mono font-semibold text-slate-800 dark:text-slate-100">{metronomeBPM}</span>
                       </div>
                       <div className="flex items-center gap-3">
                          <button onClick={() => handleSettingChange('metronomeBPM', Math.max(20, metronomeBPM - 1))} className="p-2 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors">-</button>
@@ -1662,14 +1641,14 @@ const App: React.FC = () => {
                             onChange={(e) => handleSettingChange('syncBreathWithMetronome', e.target.checked)}
                             className="h-5 w-5 text-blue-600 bg-slate-100 border-slate-300 rounded focus:ring-blue-500 dark:bg-slate-700 dark:border-slate-600 dark:focus:ring-blue-600"
                         />
-                        <span className="font-medium text-slate-800 dark:text-slate-200">
+                        <span className="font-medium text-slate-800 dark:text-slate-100">
                             Sync with Breath Speed
                         </span>
                     </label>
 
                     {syncBreathWithMetronome && (
                     <div className="flex items-center gap-2">
-                        <label htmlFor="sync-multiplier" className="font-medium text-slate-800 dark:text-slate-200">
+                        <label htmlFor="sync-multiplier" className="font-medium text-slate-800 dark:text-slate-100">
                             X
                         </label>
                         <select
@@ -1692,14 +1671,14 @@ const App: React.FC = () => {
           <>
             <div className="flex items-center pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
                 <div className="w-8"> {/* Spacer to align title */}</div>
-                <h2 className="text-xl font-bold text-center flex-grow text-slate-800 dark:text-slate-200">Settings</h2>
+                <h2 className="text-xl font-bold text-center flex-grow text-slate-800 dark:text-slate-100">Settings</h2>
                 <button onClick={() => setIsPanelOpen(false)} className="p-2 -mr-2 rounded-full hover:bg-slate-500/10 transition-colors" aria-label="Close settings panel">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                     </svg>
                 </button>
             </div>
-            <div className="flex-grow overflow-y-auto pt-4 pr-2 -mr-4 space-y-4">
+            <div className="flex-grow overflow-y-auto pt-4 pr-2 -mr-4 space-y-4 custom-scrollbar">
                 <div>
                   <ul className="space-y-2">
                     <li>
@@ -1731,7 +1710,7 @@ const App: React.FC = () => {
                 <hr className="border-slate-200/50 dark:border-slate-700/50"/>
                <div>
                   <div className="space-y-2 mb-4">
-                    <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    <label htmlFor="preset-select" className="block text-sm font-medium text-slate-700 dark:text-slate-200">
                       Load Preset
                     </label>
                     <div className="flex gap-2 items-center">
@@ -1764,7 +1743,7 @@ const App: React.FC = () => {
                     </div>
                   </div>
                   <div className="space-y-2 pt-2">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Save Current Settings</p>
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200">Save Current Settings</p>
                     <div className="flex gap-2">
                       <input 
                         type="text" 
@@ -1792,7 +1771,7 @@ const App: React.FC = () => {
             <div className="pt-4 mt-auto">
                <button
                 onClick={handleExportHtml}
-                className="w-full px-4 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition-colors text-lg"
+                className="w-full px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-opacity-50 transition-colors"
               >
                 Export as HTML
               </button>
@@ -1819,55 +1798,41 @@ const App: React.FC = () => {
             setIsPanelOpen(true);
             setPanelView('main'); // Reset to main view when opening
           }}
-          className="fixed top-4 left-4 z-30 p-2 space-y-1.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-md border border-slate-200/50 dark:border-slate-700/50 transition-opacity hover:opacity-80"
-          aria-label="Toggle settings panel"
+          className="fixed top-4 left-4 z-30 p-3 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm rounded-full border border-slate-200/50 dark:border-slate-700/50 transition-colors hover:bg-white/70 dark:hover:bg-slate-800/70"
+          aria-label="Open settings panel"
         >
-          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
-          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
-          <span className="block w-6 h-0.5 bg-slate-700 dark:bg-slate-300"></span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-800 dark:text-slate-200" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.532 1.532 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.532 1.532 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+          </svg>
         </button>
       )}
 
       {/* Main Screen Metronome UI */}
-      <div className="fixed bottom-4 right-4 z-10 flex flex-col items-end gap-4">
-        {/* Metronome Info Display */}
-        {metronomeEnabled && (showCurrentBPM || (speedTrainerEnabled && showSpeedTrainerProgress)) && (
-            <div className="w-64 p-3 rounded-xl bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/50 dark:border-slate-700/50 text-slate-800 dark:text-slate-200 shadow-lg">
-                {showCurrentBPM && (
-                    <div className="text-center">
-                        <span className="font-mono text-4xl font-bold tracking-tight">{currentDynamicBPM}</span>
-                        <span className="text-lg ml-1 font-medium">BPM</span>
-                    </div>
-                )}
-                
-                {speedTrainerEnabled && showSpeedTrainerProgress && (
-                    <div className={showCurrentBPM ? 'mt-2' : ''}>
-                        <div className="flex justify-between text-xs font-mono text-slate-600 dark:text-slate-400">
-                            <span>{startBPM}</span>
-                            <span>Target: {targetBPM}</span>
-                        </div>
-                        <div className="w-full bg-slate-300/50 dark:bg-slate-600/50 rounded-full h-2 mt-1">
-                            <div className="bg-blue-600 h-2 rounded-full transition-all duration-500 ease-linear" style={{ width: `${progressPercent}%` }}></div>
-                        </div>
-                    </div>
-                )}
+       {showMetronomeControl && (
+        <div className="fixed bottom-0 left-0 right-0 p-4 flex justify-center sm:justify-start z-10">
+          <button
+            onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
+            className={`relative w-16 h-16 rounded-full transition-all duration-300 flex items-center justify-center shadow-lg text-slate-800 dark:text-slate-200
+                        bg-white/40 dark:bg-black/40 hover:bg-white/60 dark:hover:bg-black/60 backdrop-blur-sm border border-white/20 dark:border-black/20`}
+            aria-label={metronomeEnabled ? 'Stop Metronome' : 'Start Metronome'}
+          >
+            {metronomeEnabled ? (
+              <span className="font-mono text-2xl font-semibold animate-[fadeIn_0.3s_ease-in-out]">{currentDynamicBPM}</span>
+            ) : (
+              <svg viewBox="0 0 24 24" className="w-8 h-8 fill-current" aria-hidden="true">
+                 <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
+          
+          {/* Speed Trainer Progress Bar */}
+          <div className={`fixed bottom-0 left-0 right-0 h-1 transition-opacity duration-300 ${metronomeEnabled && speedTrainerEnabled ? 'opacity-100' : 'opacity-0'}`}>
+            <div className="bg-slate-300/50 dark:bg-slate-600/50 h-full">
+                <div className="bg-blue-600 h-full transition-all duration-500 ease-linear" style={{ width: `${progressPercent}%` }}></div>
             </div>
-        )}
-
-        {/* Start/Stop Button */}
-        {showMetronomeStart && (
-             <button
-              onClick={() => handleSettingChange('metronomeEnabled', !metronomeEnabled)}
-              className={`w-20 h-20 rounded-full text-white text-xl font-bold transition-all duration-150 flex items-center justify-center shadow-lg
-                          ${metronomeEnabled 
-                              ? 'bg-red-600 hover:bg-red-700' 
-                              : 'bg-green-600 hover:bg-green-700'}`}
-              aria-label={metronomeEnabled ? 'Stop Metronome' : 'Start Metronome'}
-            >
-              {metronomeEnabled ? 'Stop' : 'Start'}
-            </button>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
         
       {isPanelOpen && (
           <div 
