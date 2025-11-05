@@ -154,6 +154,8 @@ interface Settings {
   metronomeSoundKit: 'click' | 'beep' | 'drum' | 'jazz' | 'drops';
   beatsPerMeasure: number;
   accentPattern: AccentType[];
+  panelOpacity: number;
+  panelBlur: number;
 }
 
 interface Preset {
@@ -186,6 +188,8 @@ const initialSettings: Settings = {
   metronomeSoundKit: 'click',
   beatsPerMeasure: 4,
   accentPattern: ['accent1', 'standard', 'standard', 'standard'],
+  panelOpacity: 60,
+  panelBlur: 16,
 };
 
 const defaultPresets: Preset[] = [
@@ -274,6 +278,8 @@ const defaultPresets: Preset[] = [
       metronomeSoundKit: 'click',
     },
   },
+// Fix: Removed redundant .map() call that was causing a TypeScript type inference error.
+// The presets are already complete objects due to `...initialSettings` being spread inside each definition.
 ];
 
 
@@ -290,7 +296,7 @@ const App: React.FC = () => {
   const [newPresetName, setNewPresetName] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('');
   const [currentBeat, setCurrentBeat] = useState<number | null>(null);
-  const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome'>('main');
+  const [panelView, setPanelView] = useState<'main' | 'visuals' | 'metronome' | 'interface'>('main');
   const [touchStartY, setTouchStartY] = useState<number | null>(null);
   
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -304,7 +310,7 @@ const App: React.FC = () => {
     eyeAngleOffset, borderWidth, eyeColorInversion,
     eyeColorSpeed, bgLightness, bgWarmth, glowSize,
     metronomeEnabled, metronomeBPM, metronomeSoundKit,
-    beatsPerMeasure, accentPattern
+    beatsPerMeasure, accentPattern, panelOpacity, panelBlur
   } = settings;
 
   useEffect(() => {
@@ -686,7 +692,7 @@ const App: React.FC = () => {
                 const easedColorValue = (1 - Math.cos(colorPhase * 2 * Math.PI)) / 2;
                 const colorInversionFactor = easedColorValue * (settings.eyeColorInversion / 100);
                 const darkEyeColor = lerpColor('#000000', '#ffffff', colorInversionFactor);
-                const lightEyeColor = lerpColor('#ffffff', '#000000', colorInversionFactor);
+                const lightEyeColor = lerpColor('#ffffff', '#dark', colorInversionFactor);
                 const pulsePeriod = settings.pulseSpeed * 1000;
                 const minEyeScale = settings.minRadius / settings.maxRadius;
                 const darkEyePhase = (elapsed % pulsePeriod) / pulsePeriod;
@@ -898,8 +904,51 @@ const App: React.FC = () => {
     transition: 'opacity 0.3s ease-in-out, box-shadow 0.1s ease-in-out',
   };
 
+  const panelStyle = {
+    backgroundColor: bgLightness >= 50 
+      ? `rgba(255, 255, 255, ${panelOpacity / 100})` 
+      : `rgba(30, 41, 59, ${panelOpacity / 100})`,
+    backdropFilter: `blur(${panelBlur}px)`,
+    WebkitBackdropFilter: `blur(${panelBlur}px)`,
+  };
+
   const renderPanelContent = () => {
     switch(panelView) {
+      case 'interface':
+        return (
+          <>
+            <div className="pb-4 mb-4 border-b border-slate-200/50 dark:border-slate-700/50">
+                <button onClick={() => setPanelView('main')} className="flex items-center gap-2 w-full text-left text-xl font-bold text-slate-800 dark:text-slate-200 p-2 -ml-2 rounded-lg hover:bg-slate-500/10 transition-colors" aria-label="Back to main menu">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                    <span>Interface Settings</span>
+                </button>
+            </div>
+            <div className="flex-grow overflow-y-auto pr-2 -mr-4 space-y-6 pt-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Panel Opacity ({panelOpacity}%)
+                </label>
+                <input
+                  type="range" min="20" max="100" value={panelOpacity}
+                  onChange={(e) => handleSettingChange('panelOpacity', Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Panel Blur ({panelBlur}px)
+                </label>
+                <input
+                  type="range" min="0" max="40" value={panelBlur}
+                  onChange={(e) => handleSettingChange('panelBlur', Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                />
+              </div>
+            </div>
+          </>
+        );
       case 'visuals':
         return (
           <>
@@ -1240,6 +1289,14 @@ const App: React.FC = () => {
                           </svg>
                       </button>
                     </li>
+                    <li>
+                      <button onClick={() => setPanelView('interface')} className="w-full flex justify-between items-center text-left p-4 rounded-xl hover:bg-slate-500/10 transition-colors bg-slate-500/5">
+                          <span className="font-semibold text-lg text-slate-800 dark:text-slate-200">Interface</span>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-slate-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                      </button>
+                    </li>
                   </ul>
                 </div>
                 <hr className="border-slate-200/50 dark:border-slate-700/50"/>
@@ -1355,7 +1412,10 @@ const App: React.FC = () => {
                    bottom-0 left-0 w-full h-[90vh] sm:h-full sm:w-80 md:w-96 rounded-t-3xl sm:rounded-none
                    ${isPanelOpen ? 'translate-y-0' : 'translate-y-full'}`}
       >
-        <div className="w-full h-full p-4 sm:p-6 bg-white/50 dark:bg-slate-800/50 backdrop-blur-2xl border-t sm:border-t-0 sm:border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col">
+        <div 
+            className="w-full h-full p-4 sm:p-6 border-t sm:border-t-0 sm:border-r border-slate-200/50 dark:border-slate-700/50 flex flex-col"
+            style={panelStyle}
+        >
           <div className="w-12 h-1.5 bg-slate-400 rounded-full mx-auto mb-3 sm:hidden"></div>
           {renderPanelContent()}
         </div>
