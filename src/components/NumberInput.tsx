@@ -8,7 +8,9 @@ export const NumberInput: React.FC<{
     max: number;
     step: number;
     isDark: boolean;
-}> = ({ label, value, onChange, min, max, step, isDark }) => {
+    decreaseAriaLabel: string;
+    increaseAriaLabel: string;
+}> = ({ label, value, onChange, min, max, step, isDark, decreaseAriaLabel, increaseAriaLabel }) => {
     const [inputValue, setInputValue] = useState(String(value));
     const intervalRef = useRef<number | null>(null);
     const timeoutRef = useRef<number | null>(null);
@@ -25,6 +27,13 @@ export const NumberInput: React.FC<{
         timeoutRef.current = null;
         intervalRef.current = null;
     };
+
+    // Add cleanup effect for when the component unmounts
+    useEffect(() => {
+        return () => {
+            stopCounter();
+        };
+    }, []);
 
     const valueRef = useRef(value);
     useEffect(() => {
@@ -89,15 +98,16 @@ export const NumberInput: React.FC<{
     };
     
     const textColor = isDark ? 'text-slate-200' : 'text-slate-700';
-    const bgColor = isDark ? 'bg-slate-700' : 'bg-slate-200';
-    const buttonBgColor = isDark ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-300 hover:bg-slate-400';
+    const bgColor = isDark ? 'bg-slate-700' : 'bg-white/60';
+    const buttonBgColor = isDark ? 'bg-slate-600 hover:bg-slate-500' : 'bg-slate-200 hover:bg-slate-300';
+    const borderColor = isDark ? 'border-transparent' : 'border-slate-300';
     const inputTextColor = isDark ? 'text-slate-100' : 'text-slate-800';
 
 
     return (
         <div className="space-y-1">
             <label htmlFor={`input-${label}`} className={`block text-sm font-medium ${textColor}`}>{label}</label>
-            <div className={`flex items-center justify-between p-1 ${bgColor} rounded-lg`}>
+            <div className={`flex items-center justify-between p-1 ${bgColor} rounded-lg border ${borderColor}`}>
                 <button 
                     onMouseDown={() => startCounter(false)} 
                     onMouseUp={stopCounter} 
@@ -105,7 +115,7 @@ export const NumberInput: React.FC<{
                     onTouchStart={(e) => { e.preventDefault(); startCounter(false); }}
                     onTouchEnd={stopCounter}
                     className={`px-3 py-1 rounded-md ${buttonBgColor} transition-colors select-none touch-manipulation`}
-                    aria-label={`Decrease ${label}`}
+                    aria-label={decreaseAriaLabel}
                 >-</button>
                 <input
                     id={`input-${label}`}
@@ -125,7 +135,7 @@ export const NumberInput: React.FC<{
                     onTouchStart={(e) => { e.preventDefault(); startCounter(true); }}
                     onTouchEnd={stopCounter}
                     className={`px-3 py-1 rounded-md ${buttonBgColor} transition-colors select-none touch-manipulation`}
-                    aria-label={`Increase ${label}`}
+                    aria-label={increaseAriaLabel}
                 >+</button>
             </div>
         </div>

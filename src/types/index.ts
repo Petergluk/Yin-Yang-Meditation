@@ -28,14 +28,30 @@ export interface Settings {
   panelOpacity: number;
   panelBlur: number;
   syncBreathWithMetronome: boolean;
-  syncMultiplier: number;
+  breathSyncMultiplier: number;
   asymmetricBreathing: boolean;
+  asymmetricBreathingInvert: boolean;
   speedTrainerEnabled: boolean;
   startBPM: number;
   targetBPM: number;
   increaseBy: number;
   everyNMeasures: number;
   showMetronomeControl: boolean;
+  
+  // New sync settings
+  syncRotationWithMetronome: boolean;
+  rotationSyncMultiplier: number;
+  syncPulseWithMetronome: boolean;
+  pulseSyncMultiplier: number;
+  syncCurveWithMetronome: boolean;
+  curveSyncMultiplier: number;
+  syncEyeColorWithMetronome: boolean;
+  eyeColorSyncMultiplier: number;
+
+  // Glow Flash Settings
+  glowFlashTrigger: 'none' | 'measure' | 'accent1' | 'accent2';
+  glowFlashSize: number;
+  glowFlashDuration: number;
 }
 
 export interface Preset {

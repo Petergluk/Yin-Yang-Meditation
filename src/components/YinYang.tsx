@@ -1,64 +1,63 @@
-import React from 'react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 
-/**
- * Props for the YinYang component.
- */
-interface YinYangProps {
-  size: number;
-  rotationSpeed: number;
-  pulseSpeed: number;
-  minRadius: number;
-  maxRadius: number;
-  curveRadius: number;
-  invertPulsePhase: boolean;
-  eyeAngleOffset: number;
-  borderWidth: number;
-  darkEyeColor: string;
-  lightEyeColor: string;
+export interface YinYangHandle {
+  updateCurve: (radius: number) => void;
 }
 
-export const YinYang: React.FC<YinYangProps> = ({
+interface YinYangProps {
+  size: number;
+  maxRadius: number;
+  curveRadius: number;
+  eyeAngleOffset: number;
+  borderWidth: number;
+}
+
+export const YinYang = forwardRef<YinYangHandle, YinYangProps>(({
   size,
-  rotationSpeed,
-  pulseSpeed,
-  minRadius,
   maxRadius,
   curveRadius,
-  invertPulsePhase,
   eyeAngleOffset,
   borderWidth,
-  darkEyeColor,
-  lightEyeColor,
-}) => {
-  const rotationStyle = {
-    animationDuration: `${rotationSpeed}s`,
-  };
+}, ref) => {
+  const pathRef = useRef<SVGPathElement>(null);
 
   const center = 50;
   const mainRadius = 50 - (borderWidth / 2);
-
-  const pathD = `M${center},${center + mainRadius} A${curveRadius} ${curveRadius} 0 0 0 ${center} ${center} A${curveRadius} ${curveRadius} 0 0 1 ${center} ${center - mainRadius} A${mainRadius} ${mainRadius} 0 0 1 ${center} ${center + mainRadius} Z`;
   
   const eyeCenterYTop = -mainRadius / 2;
   const eyeCenterYBottom = mainRadius / 2;
-  
-  const minScale = minRadius / maxRadius;
 
-  const basePulseStyle = {
-    animationDuration: `${pulseSpeed}s`,
-    '--min-scale': minScale,
-    '--max-scale': 1,
+  const pulseStyle = {
+    '--max-eye-scale': 1,
   } as React.CSSProperties;
 
-  const invertedPulseStyle = invertPulsePhase ? {
-    ...basePulseStyle,
-    animationDelay: `-${pulseSpeed / 2}s`,
-  } : basePulseStyle;
+  useImperativeHandle(ref, () => ({
+    updateCurve: (newRadius: number) => {
+      if (pathRef.current) {
+        const pathD = `M${center},${center + mainRadius} A${newRadius} ${newRadius} 0 0 0 ${center} ${center} A${newRadius} ${newRadius} 0 0 1 ${center} ${center - mainRadius} A${mainRadius} ${mainRadius} 0 0 1 ${center} ${center + mainRadius} Z`;
+        pathRef.current.setAttribute('d', pathD);
+      }
+    },
+  }));
+
+  const initialPathD = `M${center},${center + mainRadius} A${curveRadius} ${curveRadius} 0 0 0 ${center} ${center} A${curveRadius} ${curveRadius} 0 0 1 ${center} ${center - mainRadius} A${mainRadius} ${mainRadius} 0 0 1 ${center} ${center + mainRadius} Z`;
+
+  const darkEyeStyle: React.CSSProperties = {
+    ...pulseStyle,
+    transformOrigin: `0px ${eyeCenterYTop}px`,
+    animation: `pulse-scale var(--pulse-duration) linear infinite, color-invert-dark-eye var(--eye-color-duration) linear infinite`
+  };
+
+  const lightEyeStyle: React.CSSProperties = {
+    ...pulseStyle,
+    transformOrigin: `0px ${eyeCenterYBottom}px`,
+    animation: `pulse-scale var(--pulse-duration) linear var(--pulse-delay) infinite, color-invert-light-eye var(--eye-color-duration) linear infinite`
+  };
+
 
   return (
     <div
       className="animate-spin-continuous"
-      style={rotationStyle}
     >
       <div 
         className="relative rounded-full overflow-hidden"
@@ -74,15 +73,16 @@ export const YinYang: React.FC<YinYangProps> = ({
                 strokeWidth={borderWidth}
               />
               <path
-                  d={pathD}
+                  ref={pathRef}
+                  d={initialPathD}
                   fill="#ffffff"
               />
               <g transform={`translate(${center} ${center}) rotate(${eyeAngleOffset})`}>
-                <circle cx={0} cy={eyeCenterYTop} r={maxRadius} className="animate-pulse-scale" style={{...basePulseStyle, fill: darkEyeColor, transformOrigin: `0px ${eyeCenterYTop}px`}} />
-                <circle cx={0} cy={eyeCenterYBottom} r={maxRadius} className="animate-pulse-scale" style={{...invertedPulseStyle, fill: lightEyeColor, transformOrigin: `0px ${eyeCenterYBottom}px`}} />
+                <circle cx={0} cy={eyeCenterYTop} r={maxRadius} style={darkEyeStyle} />
+                <circle cx={0} cy={eyeCenterYBottom} r={maxRadius} style={lightEyeStyle} />
               </g>
           </svg>
       </div>
     </div>
   );
-};
+});

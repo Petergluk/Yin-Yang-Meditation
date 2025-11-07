@@ -3,11 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Meditative Yin-Yang</title>
+    <title>Equilibrium</title>
     <!-- This script loads Tailwind CSS on-the-fly, making the preview work in AI Studio -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Support for dark mode preference
+      // Support for a dark mode preference
       if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
         document.documentElement.classList.add('dark')
       } else {
@@ -27,6 +27,7 @@
 </script>
 </head>
   <body class="antialiased text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-900">
+    <!-- Restore point created. -->
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

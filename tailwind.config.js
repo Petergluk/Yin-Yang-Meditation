@@ -3,7 +3,7 @@ export default {
   content: [
     "./index.html",
     "./App.tsx",
-    "./src/components/**/*.{js,ts,jsx,tsx}", // Added path for new components
+    "./src/components/**/*.{js,ts,jsx,tsx}", // Path covers all components
   ],
   darkMode: 'class',
   theme: {

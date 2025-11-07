@@ -13,20 +13,79 @@
 
 .animate-spin-continuous {
   animation: spin-continuous linear infinite;
+  animation-duration: var(--rotation-duration, 30s);
 }
 
 @keyframes pulse-scale {
   0%,
   100% {
-    transform: scale(var(--min-scale));
+    transform: scale(var(--min-eye-scale, 0.5));
   }
   50% {
-    transform: scale(var(--max-scale));
+    transform: scale(var(--max-eye-scale, 1));
   }
 }
 
 .animate-pulse-scale {
   animation: pulse-scale linear infinite;
+  animation-duration: var(--pulse-duration, 30s);
+}
+
+@keyframes breath {
+  0%,
+  100% {
+    transform: scale(var(--min-breath-scale, 0.8));
+  }
+  50% {
+    transform: scale(1);
+  }
+}
+
+@keyframes breath-asymmetric {
+  0%,
+  100% {
+    transform: scale(var(--min-breath-scale, 0.8));
+  }
+  66.67% {
+     transform: scale(1); /* Inhale peak at 2/3 of cycle */
+  }
+}
+
+@keyframes breath-asymmetric-inverted {
+  0%,
+  100% {
+    transform: scale(var(--min-breath-scale, 0.8));
+  }
+  33.33% {
+    transform: scale(1); /* Inhale peak at 1/3 of cycle */
+  }
+}
+
+.animate-breath {
+  animation-name: var(--breath-animation-name, breath);
+  animation-duration: var(--breath-duration, 30s);
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes color-invert-dark-eye {
+  0%, 100% { fill: #000000; }
+  50% { fill: var(--dark-eye-inverted-color, #ffffff); }
+}
+
+@keyframes color-invert-light-eye {
+  0%, 100% { fill: #ffffff; }
+  50% { fill: var(--light-eye-inverted-color, #000000); }
+}
+
+.animate-color-invert-dark {
+  animation: color-invert-dark-eye linear infinite;
+  animation-duration: var(--eye-color-duration, 45s);
+}
+
+.animate-color-invert-light {
+  animation: color-invert-light-eye linear infinite;
+  animation-duration: var(--eye-color-duration, 45s);
 }
 
 /* Custom Scrollbar Styles */
@@ -60,4 +119,101 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(5px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+/* Glow Flash Animation */
+.glow-flash-active {
+  opacity: 0.7; /* Set initial opacity for the animation */
+  animation-name: glow-flash;
+  animation-duration: var(--glow-flash-duration, 0.5s);
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+@keyframes glow-flash {
+  from {
+    /* opacity is set on the class now */
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+
+/* --- Base styles for gradient sliders --- */
+.gradient-slider-lightness,
+.gradient-slider-warmth {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+/* --- Thumb Styles --- */
+.gradient-slider-lightness::-webkit-slider-thumb,
+.gradient-slider-warmth::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px; /* Center thumb on 4px track */
+  height: 14px;
+  width: 14px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1; /* slate-300 */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  cursor: pointer;
+}
+
+.dark .gradient-slider-lightness::-webkit-slider-thumb,
+.dark .gradient-slider-warmth::-webkit-slider-thumb {
+    background-color: #f1f5f9; /* slate-100 */
+    border-color: #94a3b8; /* slate-400 */
+}
+
+.gradient-slider-lightness::-moz-range-thumb,
+.gradient-slider-warmth::-moz-range-thumb {
+  height: 14px;
+  width: 14px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  border: 2px solid #cbd5e1; /* slate-300 */
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  cursor: pointer;
+}
+
+.dark .gradient-slider-lightness::-moz-range-thumb,
+.dark .gradient-slider-warmth::-moz-range-thumb {
+    background-color: #f1f5f9; /* slate-100 */
+    border-color: #94a3b8; /* slate-400 */
+}
+
+
+/* --- Track Styles --- */
+.gradient-slider-lightness::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  background: linear-gradient(to right, #000000, #ffffff);
+}
+.gradient-slider-lightness::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  background: linear-gradient(to right, #000000, #ffffff);
+}
+
+.gradient-slider-warmth::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  background: linear-gradient(to right, #60a5fa, #a1a1aa, #f59e0b); /* blue-400, stone-400, amber-500 */
+}
+.gradient-slider-warmth::-moz-range-track {
+  width: 100%;
+  height: 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  background: linear-gradient(to right, #60a5fa, #a1a1aa, #f59e0b);
 }
